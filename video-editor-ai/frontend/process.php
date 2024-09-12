@@ -1,20 +1,65 @@
 <?php
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $video_path = $_POST['video_path'];
-    $output_format = $_POST['output_format'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
+    $file = $_FILES['video_file'];
+    $filePath = $file['tmp_name'];
+    
+    // Envio do vídeo para o backend FastAPI
+    $apiUrl = 'http://127.0.0.1:8000/upload-video/';
+    $ch = curl_init($apiUrl);
+    
+    $postData = [
+        'file' => curl_file_create($filePath)
+    ];
+    
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    
+    $response = curl_exec($ch);
+    if (curl_errno($ch)) {
+        echo 'Error: ' . curl_error($ch);
+        curl_close($ch);
+        exit;
+    }
+    curl_close($ch);
+    
+    $responseData = json_decode($response, true);
+    if (!isset($responseData['file_path'])) {
+        echo 'Error: Failed to upload video.';
+        exit;
+    }
 
-    $data = json_encode(['video_path' => $video_path, 'output_format' => $output_format]);
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, 'http://127.0.0.1:8000/process-video/');
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    $videoPath = $responseData['file_path'];
+    
+    // Chamar o endpoint de processamento
+    $processApiUrl = 'http://127.0.0.1:8000/process-video/';
+    $ch = curl_init($processApiUrl);
+    
+    $processData = json_encode([
+        'video_path' => $videoPath,
+        'output_format' => 'tiktok' // ou 'youtube' conforme necessário
+    ]);
+    
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $processData);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    $response = curl_exec($ch);
+    
+    $processResponse = curl_exec($ch);
+    if (curl_errno($ch)) {
+        echo 'Error: ' . curl_error($ch);
+        curl_close($ch);
+        exit;
+    }
     curl_close($ch);
+    
+    $processResponseData = json_decode($processResponse, true);
+    if (!isset($processResponseData['message'])) {
+        echo 'Error: Failed to process video.';
+        exit;
+    }
 
-    echo 'Video processed successfully. Response: ' . $response;
+    echo 'Vídeo processado com sucesso: ' . htmlspecialchars($processResponseData['message']);
 } else {
-    echo 'No data received.';
+    echo 'Nenhum arquivo enviado.';
 }
