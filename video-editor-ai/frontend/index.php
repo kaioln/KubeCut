@@ -64,13 +64,92 @@
     <section id="testimonials" class="testimonials">
         <div class="container">
             <h2>O que Nossos Usuários Dizem</h2>
-            <div class="testimonial">
-                <p>"A edição automática é incrível! Consegui subir meus vídeos e obter resultados profissionais sem esforço."</p>
-                <div class="user">Ana Souza</div>
-            </div>
-            <div class="testimonial">
-                <p>"Um serviço fantástico para quem deseja otimizar seus vídeos para redes sociais sem complicação."</p>
-                <div class="user">João Silva</div>
+            <div class="testimonial-carousel">
+                <!-- 20 Cartões de Testemunhos -->
+                <div class="testimonial">
+                    <p>"A edição automática é incrível! Consegui subir meus vídeos e obter resultados profissionais sem esforço."</p>
+                    <div class="user">Ana Souza</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Um serviço fantástico para quem deseja otimizar seus vídeos para redes sociais sem complicação."</p>
+                    <div class="user">João Silva</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Excelente ferramenta! Facilidade e rapidez na edição dos vídeos."</p>
+                    <div class="user">Maria Oliveira</div>
+                </div>
+                <div class="testimonial">
+                    <p>"A melhor solução para criar conteúdo dinâmico para as redes sociais."</p>
+                    <div class="user">Pedro Santos</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Muito fácil de usar e os resultados são sempre impressionantes."</p>
+                    <div class="user">Carla Lima</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Recomendo para quem busca otimização sem perder qualidade."</p>
+                    <div class="user">Lucas Pereira</div>
+                </div>
+                <div class="testimonial">
+                    <p>"A interface é intuitiva e o serviço é rápido. Muito satisfeito!"</p>
+                    <div class="user">Juliana Costa</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Transformou a forma como edito meus vídeos para redes sociais."</p>
+                    <div class="user">Marcos Almeida</div>
+                </div>
+                <div class="testimonial">
+                    <p>"O melhor investimento para quem trabalha com criação de conteúdo."</p>
+                    <div class="user">Fernanda Ribeiro</div>
+                </div>
+                <div class="testimonial">
+                    <p>"A edição automática é um divisor de águas para meu trabalho."</p>
+                    <div class="user">Gustavo Martins</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Ótima ferramenta para economizar tempo e obter resultados profissionais."</p>
+                    <div class="user">Letícia Duarte</div>
+                </div>
+                <div class="testimonial">
+                    <p>"A qualidade da edição é impecável e o processo é simples."</p>
+                    <div class="user">Renato Souza</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Uma solução prática para quem precisa de vídeos bem editados rapidamente."</p>
+                    <div class="user">Samantha Silva</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Excelente para quem quer otimizar seu trabalho sem complicações."</p>
+                    <div class="user">Ricardo Fernandes</div>
+                </div>
+                <div class="testimonial">
+                    <p>"A experiência de uso é fantástica e os resultados são consistentes."</p>
+                    <div class="user">Tatiane Oliveira</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Facilitou muito a minha rotina de criação de vídeos."</p>
+                    <div class="user">Eduardo Gomes</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Muito prático e eficiente. Recomendo para todos."</p>
+                    <div class="user">Amanda Almeida</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Transforma a forma como produzo conteúdo para as redes."</p>
+                    <div class="user">Joana Costa</div>
+                </div>
+                <div class="testimonial">
+                    <p>"A melhor ferramenta que encontrei para edição de vídeos."</p>
+                    <div class="user">Rodrigo Lima</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Simples de usar e com resultados que impressionam."</p>
+                    <div class="user">Patrícia Silva</div>
+                </div>
+                <div class="testimonial">
+                    <p>"Ótima opção para quem precisa de edição rápida e eficiente."</p>
+                    <div class="user">Thiago Santos</div>
+                </div>
             </div>
         </div>
     </section>
@@ -99,8 +178,9 @@
         </div>
     </footer>
 
-    <!-- Scripts para feedback -->
-    <script>
+     <!-- Scripts para feedback e carrossel -->
+     <script>
+        // Feedback após envio de vídeo
         document.querySelector('.upload-form').addEventListener('submit', function(event) {
             event.preventDefault(); // Evita o envio padrão do formulário
             const formData = new FormData(this);
@@ -113,6 +193,43 @@
               }).catch(error => {
                   document.getElementById('feedback').innerHTML = `<p>Erro ao enviar vídeo: ${error.message}</p>`;
               });
+        });
+
+        // Navegação do carrossel
+        const carousel = document.querySelector('.testimonial-carousel');
+        let isDragging = false;
+        let startX, scrollLeft;
+
+        carousel.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.pageX - carousel.offsetLeft;
+            scrollLeft = carousel.scrollLeft;
+        });
+
+        carousel.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });
+
+        carousel.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        carousel.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - carousel.offsetLeft;
+            const walk = (x - startX) * 2; // Ajuste a velocidade de rolagem
+            carousel.scrollLeft = scrollLeft - walk;
+        });
+
+        // Navegação com as setas do teclado
+        document.addEventListener('keydown', (e) => {
+            const step = 100; // Ajuste o valor conforme necessário
+            if (e.key === 'ArrowLeft') {
+                carousel.scrollLeft -= step;
+            } else if (e.key === 'ArrowRight') {
+                carousel.scrollLeft += step;
+            }
         });
     </script>
 </body>

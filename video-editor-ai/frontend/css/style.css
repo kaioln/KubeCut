@@ -5,16 +5,18 @@ body {
     margin: 0;
     padding: 0;
     font-family: 'Poppins', sans-serif; /* Fonte Poppins */
-    background: linear-gradient(135deg, #e0eafc, #cfdef3); /* Gradiente suave de fundo */
-    color: #333;
+    background: linear-gradient(135deg, #1a1a1a, #2c2c2c); /* Gradiente escuro moderno */
+    color: #e0e0e0; /* Texto claro */
     line-height: 1.6;
+    overflow-x: hidden; /* Evita rolagem horizontal */
 }
 
+/* Estilização do cabeçalho */
 header {
-    background: #002f6c; /* Azul escuro */
-    color: #fff;
+    background: #0d0d0d; /* Preto muito escuro */
+    color: #e0e0e0;
     padding: 15px 0;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
 }
 
 header .container {
@@ -43,29 +45,34 @@ header nav ul li {
 }
 
 header nav ul li a {
-    color: #fff;
+    color: #e0e0e0;
     text-decoration: none;
     font-weight: 500;
-    transition: color 0.3s ease;
+    transition: color 0.3s ease, transform 0.3s ease;
 }
 
 header nav ul li a:hover {
-    color: #ff9800; /* Cor de destaque para hover */
+    color: #ff5722; /* Cor de destaque para hover */
+    transform: scale(1.1);
 }
 
+/* Estilização da seção heróica */
 .hero {
     background: url('../img/hero-bg.jpg') no-repeat center center/cover;
     color: #fff;
     text-align: center;
     padding: 120px 20px;
-    backdrop-filter: blur(4px); /* Correção para desfoque de fundo */
+    backdrop-filter: blur(6px); /* Maior desfoque do fundo */
+    position: relative;
+    overflow: hidden;
 }
 
 .hero h2 {
     font-size: 56px;
     margin-bottom: 20px;
     font-weight: 700;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); /* Sombra do texto para maior contraste */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7); /* Sombra do texto para maior contraste */
+    animation: fadeInUp 1s ease-out;
 }
 
 .hero p {
@@ -74,10 +81,11 @@ header nav ul li a:hover {
     font-weight: 300;
     max-width: 800px;
     margin: 0 auto;
+    animation: fadeInUp 1s ease-out 0.5s;
 }
 
 .hero .primary-btn {
-    background: linear-gradient(135deg, #ff6f00, #ff9800); /* Gradiente laranja */
+    background: linear-gradient(135deg, #ff5722, #ff9800); /* Gradiente laranja moderno */
     color: #fff;
     padding: 15px 30px;
     text-transform: uppercase;
@@ -85,36 +93,41 @@ header nav ul li a:hover {
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    transition: background 0.3s ease, transform 0.3s ease, text-decoration 0.3s ease;
-    margin-top: 20px; /* Espaçamento acima do botão */
-    display: inline-block; /* Melhor controle sobre o alinhamento */
-    text-decoration: none; /* Remove o sublinhado padrão do link */
+    transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    margin-top: 20px;
+    display: inline-block;
+    text-decoration: none;
+    animation: fadeInUp 1s ease-out 1s;
 }
 
 .hero .primary-btn:hover {
-    background: linear-gradient(135deg, #ff9800, #ff6f00);
+    background: linear-gradient(135deg, #ff9800, #ff5722);
     transform: scale(1.05);
-    text-decoration: underline; /* Sublinhado no hover */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* Estilização da seção de upload */
 .upload-section {
-    background: #fff;
+    background: #2c2c2c; /* Fundo escuro */
     padding: 60px 20px;
     text-align: center;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    margin: 20px; /* Espaçamento adicional */
 }
 
 .upload-section h2 {
     font-size: 36px;
     margin-bottom: 20px;
     font-weight: 600;
+    animation: fadeInUp 1s ease-out;
 }
 
 .upload-section p {
     font-size: 18px;
     margin-bottom: 30px;
     font-weight: 300;
+    animation: fadeInUp 1s ease-out 0.5s;
 }
 
 .upload-form {
@@ -127,107 +140,148 @@ header nav ul li a:hover {
     display: block;
     margin: 0 auto 20px auto;
     padding: 12px;
-    border: 2px solid #ddd;
+    border: none; /* Sem borda */
     border-radius: 5px;
     font-size: 16px;
     font-weight: 400;
-    transition: border-color 0.3s ease;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    background: #444; /* Fundo do input de arquivo */
 }
 
 .upload-form input[type="file"]:hover {
-    border-color: #ff9800; /* Cor de destaque para hover */
+    background-color: #333; /* Fundo do input de arquivo ao passar o mouse */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* Botão de upload */
 .upload-form .upload-btn {
-    background: linear-gradient(135deg, #002f6c, #001a40); /* Gradiente azul escuro */
-    color: #fff;
+    background: linear-gradient(135deg, #1a1a1a, #333333); /* Gradiente escuro */
+    color: #e0e0e0;
     padding: 15px 30px;
     font-weight: 600;
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    transition: background 0.3s ease, transform 0.3s ease;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
 }
 
 .upload-form .upload-btn:hover {
-    background: linear-gradient(135deg, #001a40, #002f6c);
+    background: linear-gradient(135deg, #333333, #1a1a1a);
     transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
-.feedback {
-    margin-top: 20px;
-    font-size: 16px;
-    font-weight: 500;
-}
-
+/* Estilização de seções adicionais */
 .features {
     padding: 60px 20px;
-    background: #f4f4f4; /* Cor de fundo clara */
+    background: #1e1e1e; /* Fundo escuro */
     text-align: center;
+    margin: 20px; /* Espaçamento adicional */
 }
 
 .features h2 {
     font-size: 36px;
     margin-bottom: 20px;
     font-weight: 600;
+    animation: fadeInUp 1s ease-out;
 }
 
 .feature-card {
-    background: #fff;
+    background: #2c2c2c;
     padding: 20px;
     margin: 15px;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
     font-weight: 400;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    animation: fadeInUp 1s ease-out;
 }
 
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Testemunhos */
 .testimonials {
-    background: #fff;
+    background: #2c2c2c;
     padding: 60px 20px;
     text-align: center;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    margin: 60px 0; /* Adicionado espaçamento acima e abaixo */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    margin: 60px 20px;
+    position: relative;
+    overflow: hidden; /* Oculta qualquer conteúdo que ultrapasse o container */
+}
+
+.testimonial-carousel {
+    display: flex;
+    overflow: hidden; /* Oculta a rolagem horizontal */
+    scroll-behavior: smooth;
+    gap: 15px;
+    padding: 1rem 0;
+    scroll-snap-type: x mandatory; /* Garante que os cartões se alinhem ao parar de rolar */
+    cursor: grab; /* Indica que é possível arrastar */
+}
+
+.testimonial-carousel:active {
+    cursor: grabbing; /* Muda o cursor enquanto arrasta */
 }
 
 .testimonial {
-    max-width: 600px;
-    margin: 0 auto;
+    flex: 0 0 auto;
+    width: 300px;
+    background: #3c3c3c;
     padding: 20px;
-    background: #f0f0f0;
     border-radius: 8px;
     font-style: italic;
     font-weight: 300;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    border: 1px solid #ddd; /* Borda sutil */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    border: 1px solid #444;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    scroll-snap-align: start; /* Alinha o cartão ao início do container ao parar de rolar */
+}
+
+.testimonial:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 .testimonial .user {
     margin-top: 10px;
     font-weight: bold;
-    color: #002f6c;
+    color: #ff5722;
 }
 
+/* FAQ */
 .faq {
     padding: 60px 20px;
+    margin: 20px; /* Espaçamento adicional */
 }
 
 .faq-item {
     margin-bottom: 20px;
     font-weight: 400;
-    border: 1px solid #ddd; /* Borda sutil */
+    border: 1px solid #444;
     border-radius: 8px;
-    background: #fff;
+    background: #2c2c2c;
     padding: 15px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    animation: fadeInUp 1s ease-out;
+}
+
+.faq-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 .faq-item h3 {
     font-size: 24px;
     margin-bottom: 10px;
     font-weight: 500;
-    color: #002f6c;
+    color: #ff5722;
 }
 
 .faq-item p {
@@ -235,121 +289,23 @@ header nav ul li a:hover {
     font-weight: 300;
 }
 
+/* Rodapé */
 footer {
-    background: #002f6c;
-    color: #fff;
+    background: #0d0d0d;
+    color: #e0e0e0;
+    padding: 20px;
     text-align: center;
-    padding: 20px 20px;
-    font-weight: 400;
+    border-top: 1px solid #444;
 }
 
-footer p {
-    margin: 0;
-}
-
-footer a {
-    color: #ff9800; /* Cor de destaque */
-    text-decoration: none;
-    font-weight: 600;
-}
-
-footer a:hover {
-    text-decoration: underline;
-    color: #ff6f00;
-}
-
-/* Responsividade */
-@media (max-width: 1200px) {
-    .container {
-        padding: 0 10px;
+/* Animações */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
     }
-}
-
-@media (max-width: 992px) {
-    header .container {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    header nav ul {
-        flex-direction: column;
-    }
-
-    header nav ul li {
-        margin: 10px 0;
-    }
-
-    .hero h2 {
-        font-size: 48px;
-    }
-
-    .hero p {
-        font-size: 20px;
-    }
-
-    .upload-section h2 {
-        font-size: 32px;
-    }
-
-    .upload-section p {
-        font-size: 16px;
-    }
-}
-
-@media (max-width: 768px) {
-    .hero h2 {
-        font-size: 36px;
-    }
-
-    .hero p {
-        font-size: 18px;
-    }
-
-    .upload-section h2 {
-        font-size: 28px;
-    }
-
-    .upload-section p {
-        font-size: 14px;
-    }
-
-    .features h2 {
-        font-size: 32px;
-    }
-
-    .feature-card {
-        margin: 10px;
-        padding: 15px;
-    }
-}
-
-@media (max-width: 576px) {
-    .hero h2 {
-        font-size: 28px;
-    }
-
-    .hero p {
-        font-size: 16px;
-    }
-
-    .upload-section h2 {
-        font-size: 24px;
-    }
-
-    .upload-section p {
-        font-size: 12px;
-    }
-
-    .features h2 {
-        font-size: 28px;
-    }
-
-    .feature-card {
-        margin: 5px;
-        padding: 10px;
-    }
-
-    .testimonial {
-        max-width: 90%;
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
