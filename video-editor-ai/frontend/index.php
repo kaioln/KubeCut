@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Aplicação para edição automática de vídeos para TikTok e YouTube Reels. Suba seus vídeos e obtenha cortes e legendas otimizados para cada plataforma.">
     <meta name="keywords" content="edição de vídeos, TikTok, YouTube Reels, legendas automáticas, edição automática">
-    <title>Editor de Vídeos Automático</title>
+    <title>jKpCutPro</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <header>
         <div class="container">
-            <div class="logo">VideoEditPro</div>
+            <div class="logo">jKpCutPro</div>
             <nav>
                 <ul>
                     <li><a href="#features">Recursos</a></li>
@@ -54,9 +54,10 @@
             <h2>Faça o Upload do Seu Vídeo</h2>
             <p>Escolha o arquivo do vídeo que deseja processar e selecione a plataforma para a qual deseja otimizar.</p>
             <form class="upload-form" action="/upload-video/" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" id="file" required>
-                <button type="submit" class="upload-btn">Enviar Vídeo</button>
+                <input type="file" name="file" id="file" accept="video/*" required aria-label="Escolha o arquivo de vídeo">
+                <button type="submit" class="upload-btn" aria-label="Enviar vídeo">Enviar Vídeo</button>
             </form>
+            <div id="feedback" class="feedback"></div> <!-- Área para feedback -->
         </div>
     </section>
 
@@ -94,8 +95,25 @@
 
     <footer>
         <div class="container">
-            <p>&copy; 2024 VideoEditPro. Todos os direitos reservados. | <a href="#">Privacidade</a> | <a href="#">Termos de Serviço</a></p>
+            <p>&copy; 2024 jKpCutPro. Todos os direitos reservados. | <a href="#">Privacidade</a> | <a href="#">Termos de Serviço</a></p>
         </div>
     </footer>
+
+    <!-- Scripts para feedback -->
+    <script>
+        document.querySelector('.upload-form').addEventListener('submit', function(event) {
+            event.preventDefault(); // Evita o envio padrão do formulário
+            const formData = new FormData(this);
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+              .then(data => {
+                  document.getElementById('feedback').innerHTML = `<p>Vídeo enviado com sucesso: ${data.file_path}</p>`;
+              }).catch(error => {
+                  document.getElementById('feedback').innerHTML = `<p>Erro ao enviar vídeo: ${error.message}</p>`;
+              });
+        });
+    </script>
 </body>
 </html>

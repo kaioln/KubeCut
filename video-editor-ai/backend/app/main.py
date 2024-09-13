@@ -5,7 +5,6 @@ import shutil
 import os
 import whisper
 from moviepy.editor import VideoFileClip, concatenate_videoclips
-import random  # Linha removida
 
 app = FastAPI()
 
@@ -19,9 +18,17 @@ class VideoProcessRequest(BaseModel):
     video_path: str
     output_format: str
 
+@app.get("/")
+def read_root():
+    return {"message": "FastAPI server is running"}
+
 @app.post("/upload-video/")
 async def upload_video(file: UploadFile = File(...)):
     try:
+        # Verifica o tipo do arquivo
+        if not file.content_type.startswith('video/'):
+            raise HTTPException(status_code=400, detail="O arquivo enviado não é um vídeo.")
+        
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -82,4 +89,4 @@ def cut_video(video_path, output_path, scenes):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
