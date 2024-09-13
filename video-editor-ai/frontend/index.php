@@ -53,8 +53,12 @@
         <div class="container">
             <h2>Faça o Upload do Seu Vídeo</h2>
             <p>Escolha o arquivo do vídeo que deseja processar e selecione a plataforma para a qual deseja otimizar.</p>
-            <form class="upload-form" action="/upload-video/" method="post" enctype="multipart/form-data">
+            <form class="upload-form" id="uploadForm" enctype="multipart/form-data">
                 <input type="file" name="file" id="file" accept="video/*" required aria-label="Escolha o arquivo de vídeo">
+                <select name="output_format" id="output_format" required aria-label="Escolha o formato de saída">
+                    <option value="tiktok">TikTok</option>
+                    <option value="youtube">YouTube</option>
+                </select>
                 <button type="submit" class="upload-btn" aria-label="Enviar vídeo">Enviar Vídeo</button>
             </form>
             <div id="feedback" class="feedback"></div> <!-- Área para feedback -->
@@ -65,7 +69,7 @@
         <div class="container">
             <h2>O que Nossos Usuários Dizem</h2>
             <div class="testimonial-carousel">
-                <!-- 20 Cartões de Testemunhos -->
+                <!-- Cartões de Testemunhos -->
                 <div class="testimonial">
                     <p>"A edição automática é incrível! Consegui subir meus vídeos e obter resultados profissionais sem esforço."</p>
                     <div class="user">Ana Souza</div>
@@ -79,76 +83,16 @@
                     <div class="user">Maria Oliveira</div>
                 </div>
                 <div class="testimonial">
-                    <p>"A melhor solução para criar conteúdo dinâmico para as redes sociais."</p>
-                    <div class="user">Pedro Santos</div>
+                    <p>"A automação do processo de edição é um grande diferencial. Muito prático e eficiente!"</p>
+                    <div class="user">Carlos Santos</div>
                 </div>
                 <div class="testimonial">
-                    <p>"Muito fácil de usar e os resultados são sempre impressionantes."</p>
-                    <div class="user">Carla Lima</div>
+                    <p>"Adorei a facilidade de subir vídeos e receber cortes otimizados. Recomendo!"</p>
+                    <div class="user">Fernanda Costa</div>
                 </div>
                 <div class="testimonial">
-                    <p>"Recomendo para quem busca otimização sem perder qualidade."</p>
-                    <div class="user">Lucas Pereira</div>
-                </div>
-                <div class="testimonial">
-                    <p>"A interface é intuitiva e o serviço é rápido. Muito satisfeito!"</p>
-                    <div class="user">Juliana Costa</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Transformou a forma como edito meus vídeos para redes sociais."</p>
-                    <div class="user">Marcos Almeida</div>
-                </div>
-                <div class="testimonial">
-                    <p>"O melhor investimento para quem trabalha com criação de conteúdo."</p>
-                    <div class="user">Fernanda Ribeiro</div>
-                </div>
-                <div class="testimonial">
-                    <p>"A edição automática é um divisor de águas para meu trabalho."</p>
-                    <div class="user">Gustavo Martins</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Ótima ferramenta para economizar tempo e obter resultados profissionais."</p>
-                    <div class="user">Letícia Duarte</div>
-                </div>
-                <div class="testimonial">
-                    <p>"A qualidade da edição é impecável e o processo é simples."</p>
-                    <div class="user">Renato Souza</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Uma solução prática para quem precisa de vídeos bem editados rapidamente."</p>
-                    <div class="user">Samantha Silva</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Excelente para quem quer otimizar seu trabalho sem complicações."</p>
-                    <div class="user">Ricardo Fernandes</div>
-                </div>
-                <div class="testimonial">
-                    <p>"A experiência de uso é fantástica e os resultados são consistentes."</p>
-                    <div class="user">Tatiane Oliveira</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Facilitou muito a minha rotina de criação de vídeos."</p>
-                    <div class="user">Eduardo Gomes</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Muito prático e eficiente. Recomendo para todos."</p>
-                    <div class="user">Amanda Almeida</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Transforma a forma como produzo conteúdo para as redes."</p>
-                    <div class="user">Joana Costa</div>
-                </div>
-                <div class="testimonial">
-                    <p>"A melhor ferramenta que encontrei para edição de vídeos."</p>
-                    <div class="user">Rodrigo Lima</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Simples de usar e com resultados que impressionam."</p>
-                    <div class="user">Patrícia Silva</div>
-                </div>
-                <div class="testimonial">
-                    <p>"Ótima opção para quem precisa de edição rápida e eficiente."</p>
-                    <div class="user">Thiago Santos</div>
+                    <p>"A integração com as plataformas sociais é perfeita. A edição automática é um verdadeiro tempo-saver."</p>
+                    <div class="user">Juliana Almeida</div>
                 </div>
             </div>
         </div>
@@ -178,40 +122,68 @@
         </div>
     </footer>
 
-     <!-- Scripts para feedback e carrossel -->
-     <script>
-        // Feedback após envio de vídeo
-        document.querySelector('.upload-form').addEventListener('submit', function(event) {
+    <!-- Scripts para feedback e carrossel -->
+    <script>
+        // Função para fazer upload de vídeo e exibir feedback
+        document.querySelector('#uploadForm').addEventListener('submit', function(event) {
             event.preventDefault(); // Evita o envio padrão do formulário
+            
             const formData = new FormData(this);
-            fetch(this.action, {
+            
+            fetch('http://localhost:8001/process-video/', { // Altere o URL para o endereço correto do FastAPI
                 method: 'POST',
                 body: formData
-            }).then(response => response.json())
-              .then(data => {
-                  document.getElementById('feedback').innerHTML = `<p>Vídeo enviado com sucesso: ${data.file_path}</p>`;
-              }).catch(error => {
-                  document.getElementById('feedback').innerHTML = `<p>Erro ao enviar vídeo: ${error.message}</p>`;
-              });
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.output_path) {
+                    document.getElementById('feedback').innerHTML = `<p>Vídeo processado com sucesso! Baixe o vídeo editado <a href="${data.output_path}" target="_blank">aqui</a>.</p>`;
+                } else {
+                    document.getElementById('feedback').innerHTML = `<p>Erro ao processar vídeo: ${data.detail}</p>`;
+                }
+            })
+            .catch(error => {
+                document.getElementById('feedback').innerHTML = `<p>Erro ao processar vídeo: ${error.message}</p>`;
+            });
         });
 
         // Navegação do carrossel
         const carousel = document.querySelector('.testimonial-carousel');
         let isDragging = false;
-        let startX, scrollLeft;
+        let startX, scrollLeft, lastX, velocity, lastTimestamp, animationFrameId;
+
+        const inertia = () => {
+            if (Math.abs(velocity) > 0.1) {
+                carousel.scrollLeft -= velocity;
+                velocity *= 0.95; // Reduz a velocidade para simular desaceleração
+                animationFrameId = requestAnimationFrame(inertia);
+            } else {
+                cancelAnimationFrame(animationFrameId);
+            }
+        };
 
         carousel.addEventListener('mousedown', (e) => {
             isDragging = true;
             startX = e.pageX - carousel.offsetLeft;
             scrollLeft = carousel.scrollLeft;
+            lastX = startX;
+            velocity = 0;
+            lastTimestamp = Date.now();
+            cancelAnimationFrame(animationFrameId);
         });
 
         carousel.addEventListener('mouseleave', () => {
-            isDragging = false;
+            if (isDragging) {
+                isDragging = false;
+                inertia();
+            }
         });
 
         carousel.addEventListener('mouseup', () => {
-            isDragging = false;
+            if (isDragging) {
+                isDragging = false;
+                inertia();
+            }
         });
 
         carousel.addEventListener('mousemove', (e) => {
@@ -220,11 +192,18 @@
             const x = e.pageX - carousel.offsetLeft;
             const walk = (x - startX) * 2; // Ajuste a velocidade de rolagem
             carousel.scrollLeft = scrollLeft - walk;
+
+            const now = Date.now();
+            const deltaX = x - lastX;
+            const deltaTime = now - lastTimestamp;
+
+            velocity = deltaX / deltaTime;
+            lastX = x;
+            lastTimestamp = now;
         });
 
-        // Navegação com as setas do teclado
         document.addEventListener('keydown', (e) => {
-            const step = 100; // Ajuste o valor conforme necessário
+            const step = 100; // Ajuste o valor de acordo com sua necessidade
             if (e.key === 'ArrowLeft') {
                 carousel.scrollLeft -= step;
             } else if (e.key === 'ArrowRight') {

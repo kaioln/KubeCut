@@ -1,124 +1,146 @@
-# Importa as bibliotecas necessárias
-from fastapi import FastAPI, UploadFile, File, HTTPException  # FastAPI para construir a API, UploadFile e File para upload de arquivos, HTTPException para erros HTTP
-from fastapi.responses import JSONResponse  # Para retornar respostas JSON personalizadas
-from pydantic import BaseModel  # Para definir modelos de dados que são validados automaticamente
-import shutil  # Para operações de arquivo, como mover ou copiar arquivos
-import uvicorn  # Importa o Uvicorn para rodar o servidor ASGI
-import os  # Para operações de sistema como criar pastas
-import whisper  # Biblioteca Whisper da OpenAI para reconhecimento de fala
-from moviepy.editor import VideoFileClip, concatenate_videoclips  # MoviePy para manipulação e edição de vídeo
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import shutil
+import uvicorn
+import os
+import whisper
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+from moviepy.video.fx.all import resize
+import scenedetect
+from scenedetect import VideoManager, SceneManager
+from scenedetect.detectors import ContentDetector
+import numpy as np
 
 app = FastAPI()
 
-# Define pastas para armazenar vídeos carregados e processados
 UPLOAD_FOLDER = "uploaded_videos"
 PROCESSED_FOLDER = "processed_videos"
-# Cria as pastas se elas não existirem
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
-# Modelo de dados para a requisição de processamento de vídeo
 class VideoProcessRequest(BaseModel):
-    video_path: str  # Caminho do vídeo a ser processado
-    output_format: str  # Formato de saída (tiktok ou youtube)
+    video_path: str
+    output_format: str
 
-# Rota de teste para verificar se o servidor está rodando
 @app.get("/")
 def read_root():
     return {"message": "FastAPI server is running"}
 
-# Endpoint para upload de vídeo
 @app.post("/upload-video/")
 async def upload_video(file: UploadFile = File(...)):
     try:
-        # Verifica se o arquivo enviado é um vídeo
         if not file.content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="O arquivo enviado não é um vídeo.")
         
-        # Salva o arquivo de vídeo na pasta de upload
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)  # Copia o conteúdo do arquivo enviado para o local de destino
+            shutil.copyfileobj(file.file, buffer)
         
-        return {"file_path": file_path}  # Retorna o caminho do arquivo carregado
+        return {"file_path": file_path}
     except Exception as e:
-        # Lida com erros inesperados e retorna um erro HTTP
         raise HTTPException(status_code=500, detail=str(e))
 
-# Endpoint para processar o vídeo de acordo com o formato especificado (TikTok ou YouTube)
 @app.post("/process-video/")
 async def process_video(request: VideoProcessRequest):
     try:
-        # Extrai o caminho do vídeo e o formato de saída da requisição
         video_path = request.video_path
         output_format = request.output_format
 
-        # Verifica se o formato de saída é válido
         if output_format not in ["tiktok", "youtube"]:
             raise HTTPException(status_code=400, detail="Formato de saída inválido.")
 
-        # Define o caminho de saída para o vídeo processado
-        output_path = os.path.join(PROCESSED_FOLDER, os.path.basename(video_path))
+        output_folder = os.path.join(PROCESSED_FOLDER, os.path.basename(video_path).replace(".mp4", ""))
+        os.makedirs(output_folder, exist_ok=True)
 
-        # Gera as cenas de acordo com o formato especificado
-        if output_format == "tiktok":
-            scenes = generate_tiktok_scenes(video_path)
-        elif output_format == "youtube":
-            scenes = generate_youtube_scenes(video_path)
+        # Gera as cenas de acordo com o conteúdo usando PySceneDetect
+        scenes = detect_scenes(video_path)
 
-        # Corta o vídeo de acordo com as cenas geradas
-        cut_video(video_path, output_path, scenes)
+        # Corta o vídeo de acordo com as cenas e adiciona legendas personalizadas
+        process_clips_with_dynamic_captions(video_path, output_folder, scenes, output_format)
         
-        # Gera legendas para o vídeo usando o modelo Whisper
-        captions = generate_captions(video_path)
-
-        # Salva as legendas geradas em um arquivo .srt
-        with open(output_path.replace(".mp4", ".srt"), "w") as f:
-            f.write(captions)
-
-        # Retorna uma resposta indicando que o processamento foi concluído
-        return JSONResponse(content={"message": "Processamento de vídeo completo!", "output_path": output_path})
+        return JSONResponse(content={"message": "Processamento de vídeo completo!", "output_folder": output_folder})
 
     except Exception as e:
-        # Lida com erros inesperados e retorna um erro HTTP
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Erro ao processar o vídeo: {str(e)}")
 
-# Função para gerar cenas de vídeo para o formato TikTok (clips de 15 segundos)
-def generate_tiktok_scenes(video_path):
-    video = VideoFileClip(video_path)  # Carrega o vídeo usando MoviePy
-    duration = video.duration  # Obtém a duração do vídeo em segundos
-    # Divide o vídeo em cenas de 15 segundos
-    return [(i, min(i + 15, duration)) for i in range(0, int(duration), 15)]
+def detect_scenes(video_path):
+    video_manager = VideoManager([video_path])
+    scene_manager = SceneManager()
+    scene_manager.add_detector(ContentDetector())
+    video_manager.set_downscale_factor()
+    video_manager.start()
+    scene_manager.detect_scenes(frame_source=video_manager)
+    scene_list = scene_manager.get_scene_list()
 
-# Função para gerar cenas de vídeo para o formato YouTube (clips de 60 segundos)
-def generate_youtube_scenes(video_path):
-    video = VideoFileClip(video_path)  # Carrega o vídeo usando MoviePy
-    duration = video.duration  # Obtém a duração do vídeo em segundos
-    # Divide o vídeo em cenas de 60 segundos
-    return [(i, min(i + 60, duration)) for i in range(0, int(duration), 60)]
+    # Convertendo lista de cenas para timestamps
+    scenes = [(scene[0].get_seconds(), scene[1].get_seconds()) for scene in scene_list]
+    return scenes
 
-# Função para gerar legendas para o vídeo usando o modelo Whisper
 def generate_captions(video_path):
-    model = whisper.load_model("base")  # Carrega o modelo Whisper
+    model = whisper.load_model("base")  # Assumindo que você está usando o modelo 'base'
     result = model.transcribe(video_path)  # Transcreve o áudio do vídeo
-    captions = result['text']  # Extrai o texto transcrito
+    captions = result["text"]  # Extrai o texto transcrito
     return captions
 
-# Função para cortar o vídeo com base nas cenas fornecidas e salvar o vídeo processado
-def cut_video(video_path, output_path, scenes):
-    try:
-        video = VideoFileClip(video_path)  # Carrega o vídeo usando MoviePy
-        # Cria uma lista de clips a partir das cenas fornecidas
-        clips = [video.subclip(scene[0], scene[1]) for scene in scenes]
-        # Concatena os clips em um único vídeo
-        final_clip = concatenate_videoclips(clips)
-        # Salva o vídeo final no caminho de saída especificado
-        final_clip.write_videofile(output_path, codec="libx264")
-    except Exception as e:
-        # Lida com erros inesperados e retorna um erro HTTP
-        raise HTTPException(status_code=500, detail=str(e))
+def format_captions(segments):
+    captions = []
+    for i, segment in enumerate(segments):
+        start = segment['start']
+        end = segment['end']
+        text = segment['text']
+        captions.append(f"{i+1}\n{format_time(start)} --> {format_time(end)}\n{text}\n")
+    return "\n".join(captions)
 
+def format_time(seconds):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = seconds % 60
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02}:{minutes:02}:{int(seconds):02},{milliseconds:03}"
+
+def process_clips_with_dynamic_captions(video_path, output_folder, scenes, output_format):
+    try:
+        video = VideoFileClip(video_path)
+        captions, segments = generate_captions(video_path)
+
+        for i, (start, end) in enumerate(scenes):
+            clip = video.subclip(start, end)
+
+            # Determina o estilo das legendas com base no conteúdo e ambientação
+            scene_captions = [seg for seg in segments if seg['start'] >= start and seg['end'] <= end]
+            caption_text = "\n".join([seg['text'] for seg in scene_captions])
+            
+            txt_clip = TextClip(caption_text, fontsize=24, color='white', bg_color='black')
+            txt_clip = txt_clip.set_pos(('center', 'bottom')).set_duration(clip.duration)
+
+            # Personaliza a escala e posição das legendas baseadas no conteúdo da cena
+            txt_clip = customize_caption_style(txt_clip, caption_text)
+
+            # Composição do vídeo com legendas
+            video_with_captions = CompositeVideoClip([clip, txt_clip])
+            
+            # Redimensiona o vídeo para a plataforma de saída (TikTok ou YouTube)
+            if output_format == "tiktok":
+                video_with_captions = video_with_captions.fx(resize, newsize=(1080, 1920))
+            elif output_format == "youtube":
+                video_with_captions = video_with_captions.fx(resize, newsize=(1920, 1080))
+
+            video_with_captions.write_videofile(
+                os.path.join(output_folder, f"scene_{i}.mp4"), codec="libx264"
+            )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao processar os cortes: {str(e)}")
+
+def customize_caption_style(txt_clip, caption_text):
+    # Exemplo básico de personalização de estilo de legendas
+    if "dark" in caption_text.lower():
+        txt_clip = txt_clip.set_color("yellow")
+    elif "bright" in caption_text.lower():
+        txt_clip = txt_clip.set_color("black")
+    # Pode-se adicionar mais lógica para ajustar fonte, tamanho, cor, etc.
+    return txt_clip
 
 if __name__ == "__main__":
-    
-    uvicorn.run(app, host="0.0.0.0", port=8001)  # Inicia o servidor na porta 8001
+    uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -1,42 +1,64 @@
 <?php
-// Verifica se a requisição foi enviada por meio do método POST e se um arquivo de vídeo foi anexado.
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['video'])) {
-    // Obtém o arquivo de vídeo enviado através do formulário.
-    $video = $_FILES['video'];
-    // Define o caminho onde o arquivo será armazenado temporariamente no servidor.
-    $target_path = 'uploads/' . basename($video['name']);
+// Configurações
+$uploadDirectory = 'uploads/';
+$allowedFileTypes = ['video/mp4', 'video/mkv', 'video/avi']; // Tipos de vídeo permitidos
 
-    // Verifica se o diretório de uploads existe. Se não existir, cria o diretório com permissões apropriadas.
-    if (!is_dir('uploads')) {
-        mkdir('uploads', 0777, true);  // Cria o diretório 'uploads' se não existir, com permissões 0777 e subdiretórios, se necessário.
-    }
+// Verifica se o formulário foi enviado
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_FILES['file']) && isset($_POST['output_format'])) {
+        $file = $_FILES['file'];
+        $outputFormat = $_POST['output_format'];
+        $targetFile = $uploadDirectory . basename($file['name']);
+        
+        // Verifica se o arquivo é um vídeo válido
+        if (in_array($file['type'], $allowedFileTypes)) {
+            if (move_uploaded_file($file['tmp_name'], $targetFile)) {
+                // Chama a API FastAPI para processar o vídeo
+                $apiUrl = 'http://localhost:8001/process-video/'; // URL da sua API FastAPI
+                
+                // Dados a serem enviados para a API FastAPI
+                $data = [
+                    'video_path' => $targetFile,
+                    'output_format' => $outputFormat
+                ];
 
-    // Move o arquivo enviado para o diretório de uploads.
-    if (move_uploaded_file($video['tmp_name'], $target_path)) {
-        // Inicializa uma nova sessão cURL para fazer a requisição ao backend FastAPI para o upload do vídeo.
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'http://127.0.0.1:8000/upload-video/');  // Define a URL do endpoint FastAPI para upload de vídeo.
-        curl_setopt($ch, CURLOPT_POST, 1);  // Define o método da requisição como POST.
-        curl_setopt($ch, CURLOPT_POSTFIELDS, ['file' => new CURLFile($target_path)]);  // Define os campos de dados POST com o arquivo carregado.
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);  // Retorna o resultado da requisição cURL como uma string.
+                // Inicializa a sessão cURL
+                $ch = curl_init($apiUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                ]);
 
-        // Executa a requisição cURL e captura a resposta.
-        $response = curl_exec($ch);
-        if ($response === false) {
-            // Exibe uma mensagem de erro se a requisição cURL falhar.
-            echo 'cURL Error: ' . curl_error($ch);
+                // Envia o pedido
+                $response = curl_exec($ch);
+                $error = curl_error($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE); // Código HTTP da resposta
+                curl_close($ch);
+
+                // Verifica se houve erro com a requisição
+                if ($httpCode != 200) {
+                    echo '<p>Erro ao processar o vídeo. Código HTTP: ' . $httpCode . '</p>';
+                    echo '<p>Detalhes do erro: ' . htmlspecialchars($error) . '</p>';
+                } else {
+                    // Exibe a resposta da API
+                    $responseData = json_decode($response, true);
+                    if (isset($responseData['output_path'])) {
+                        echo '<p>Vídeo processado com sucesso! <a href="' . htmlspecialchars($responseData['output_path']) . '" target="_blank">Baixe o vídeo editado aqui</a>.</p>';
+                    } else {
+                        echo '<p>Resposta inesperada da API: ' . htmlspecialchars($response) . '</p>';
+                    }
+                }
+            } else {
+                echo '<p>Erro ao mover o arquivo para o diretório de upload.</p>';
+            }
         } else {
-            // Exibe uma mensagem de sucesso com a resposta do backend.
-            echo 'Video uploaded successfully. Response: ' . $response;
+            echo '<p>Tipo de arquivo não permitido. Apenas vídeos MP4, MKV e AVI são permitidos.</p>';
         }
-
-        // Fecha a sessão cURL após a requisição ser concluída.
-        curl_close($ch);
     } else {
-        // Exibe uma mensagem de erro se falhar ao mover o arquivo para o diretório de uploads.
-        echo 'Failed to move uploaded file.';
+        echo '<p>Por favor, selecione um vídeo e uma plataforma.</p>';
     }
 } else {
-    // Exibe uma mensagem de erro se nenhum vídeo foi enviado.
-    echo 'No video uploaded.';
+    echo '<p>Não foi possível processar o pedido. Tente novamente.</p>';
 }

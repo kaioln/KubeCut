@@ -31,6 +31,7 @@ header .container {
 header .logo {
     font-size: 28px;
     font-weight: 700;
+    text-transform: uppercase;
 }
 
 header nav ul {
@@ -62,7 +63,7 @@ header nav ul li a:hover {
     color: #fff;
     text-align: center;
     padding: 120px 20px;
-    backdrop-filter: blur(6px); /* Maior desfoque do fundo */
+    backdrop-filter: blur(8px); /* Aumenta o desfoque do fundo */
     position: relative;
     overflow: hidden;
 }
@@ -71,7 +72,7 @@ header nav ul li a:hover {
     font-size: 56px;
     margin-bottom: 20px;
     font-weight: 700;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7); /* Sombra do texto para maior contraste */
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); /* Sombra mais pronunciada */
     animation: fadeInUp 1s ease-out;
 }
 
@@ -91,7 +92,7 @@ header nav ul li a:hover {
     text-transform: uppercase;
     font-weight: 600;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px; /* Borda mais arredondada */
     cursor: pointer;
     transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
     margin-top: 20px;
@@ -103,7 +104,7 @@ header nav ul li a:hover {
 .hero .primary-btn:hover {
     background: linear-gradient(135deg, #ff9800, #ff5722);
     transform: scale(1.05);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Estilização da seção de upload */
@@ -160,7 +161,7 @@ header nav ul li a:hover {
     padding: 15px 30px;
     font-weight: 600;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px; /* Borda mais arredondada */
     cursor: pointer;
     transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
@@ -169,7 +170,7 @@ header nav ul li a:hover {
 .upload-form .upload-btn:hover {
     background: linear-gradient(135deg, #333333, #1a1a1a);
     transform: scale(1.05);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Estilização de seções adicionais */
@@ -215,6 +216,7 @@ header nav ul li a:hover {
     overflow: hidden; /* Oculta qualquer conteúdo que ultrapasse o container */
 }
 
+/* Estilização do carrossel */
 .testimonial-carousel {
     display: flex;
     overflow: hidden; /* Oculta a rolagem horizontal */
@@ -223,6 +225,7 @@ header nav ul li a:hover {
     padding: 1rem 0;
     scroll-snap-type: x mandatory; /* Garante que os cartões se alinhem ao parar de rolar */
     cursor: grab; /* Indica que é possível arrastar */
+    position: relative; /* Necessário para o posicionamento do carrossel */
 }
 
 .testimonial-carousel:active {
@@ -307,5 +310,39 @@ footer {
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    header .container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    header nav ul {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-top: 10px;
+    }
+
+    header nav ul li {
+        margin: 10px 0;
+    }
+
+    .hero h2 {
+        font-size: 36px;
+    }
+
+    .hero p {
+        font-size: 18px;
+    }
+
+    .feature-card, .testimonial {
+        width: 100%;
+    }
+
+    .upload-section, .features, .faq {
+        margin: 0;
     }
 }
