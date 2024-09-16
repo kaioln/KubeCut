@@ -1,19 +1,21 @@
 <?php
 // Verifica se o método de requisição é POST e se o arquivo de vídeo foi enviado através do formulário.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file']) && isset($_POST['output_format'])) {
     // Obtém o arquivo enviado através do formulário HTML.
     $file = $_FILES['video_file'];
+    $outputFormat = $_POST['output_format'];
     $filePath = $file['tmp_name'];  // Caminho temporário do arquivo no servidor.
 
     // URL do endpoint do backend FastAPI para upload de vídeos.
-    $apiUrl = 'http://127.0.0.1:8000/upload-video/';
+    $apiUrl = 'http://127.0.0.1:8001/upload-video/';
     
     // Inicializa uma nova sessão cURL para fazer a requisição de upload do vídeo.
     $ch = curl_init($apiUrl);
     
     // Prepara os dados para serem enviados na requisição cURL. O arquivo é enviado como uma nova instância de curl_file_create.
     $postData = [
-        'file' => curl_file_create($filePath)  // Cria um arquivo cURL a partir do caminho temporário do arquivo.
+        'file' => curl_file_create($filePath),  // Cria um arquivo cURL a partir do caminho temporário do arquivo.
+        'output_format' => $outputFormat  // Inclui o formato de saída na requisição.
     ];
     
     // Configurações da requisição cURL para fazer o upload do vídeo.
@@ -43,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
     $videoPath = $responseData['file_path'];
     
     // URL do endpoint do backend FastAPI para processar o vídeo.
-    $processApiUrl = 'http://127.0.0.1:8000/process-video/';
+    $processApiUrl = 'http://127.0.0.1:8001/process-video/';
     
     // Inicializa uma nova sessão cURL para fazer a requisição de processamento do vídeo.
     $ch = curl_init($processApiUrl);
@@ -51,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
     // Prepara os dados para serem enviados na requisição de processamento.
     $processData = json_encode([
         'video_path' => $videoPath,  // Caminho do vídeo carregado que será processado.
-        'output_format' => 'tiktok'  // Formato de saída desejado. Pode ser 'tiktok' ou 'youtube'.
+        'output_format' => $outputFormat  // Formato de saída desejado. Pode ser 'tiktok' ou 'youtube'.
     ]);
     
     // Configurações da requisição cURL para processar o vídeo.
@@ -81,6 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
     // Exibe uma mensagem de sucesso ao usuário informando que o vídeo foi processado com sucesso.
     echo 'Vídeo processado com sucesso: ' . htmlspecialchars($processResponseData['message']);
 } else {
-    // Exibe uma mensagem de erro se nenhum arquivo for enviado.
-    echo 'Nenhum arquivo enviado.';
+    // Exibe uma mensagem de erro se nenhum arquivo for enviado ou o formato não for especificado.
+    echo 'Nenhum arquivo enviado ou formato não especificado.';
 }

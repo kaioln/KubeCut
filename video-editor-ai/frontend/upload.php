@@ -37,6 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE); // Código HTTP da resposta
                 curl_close($ch);
 
+                // Depuração
+                echo '<h3>Depuração</h3>';
+                echo '<p><strong>Código HTTP da resposta:</strong> ' . $httpCode . '</p>';
+                echo '<p><strong>Erro cURL (se houver):</strong> ' . htmlspecialchars($error) . '</p>';
+                echo '<p><strong>Resposta da API (bruta):</strong> <pre>' . htmlspecialchars($response) . '</pre></p>';
+                echo '<p><strong>Dados enviados para a API:</strong> <pre>' . htmlspecialchars(json_encode($data)) . '</pre></p>';
+
                 // Verifica se houve erro com a requisição
                 if ($httpCode != 200) {
                     echo '<p>Erro ao processar o vídeo. Código HTTP: ' . $httpCode . '</p>';
@@ -44,8 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     // Exibe a resposta da API
                     $responseData = json_decode($response, true);
-                    if (isset($responseData['output_path'])) {
-                        echo '<p>Vídeo processado com sucesso! <a href="' . htmlspecialchars($responseData['output_path']) . '" target="_blank">Baixe o vídeo editado aqui</a>.</p>';
+                    if (isset($responseData['output_folder'])) {
+                        echo '<p>Vídeo processado com sucesso!</p>';
+                        echo '<p>Os arquivos foram salvos no diretório: ' . htmlspecialchars($responseData['output_folder']) . '</p>';
                     } else {
                         echo '<p>Resposta inesperada da API: ' . htmlspecialchars($response) . '</p>';
                     }

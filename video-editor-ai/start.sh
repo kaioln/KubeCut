@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Defina o diretório do projeto
-PROJECT_DIR="/mnt/c/Users/TI/Project/video-editor-ai"
+PROJECT_DIR="/mnt/c/Users/Kaio/Projects/jKpCutPro/video-editor-ai"
 
 # Inicie o backend FastAPI na porta 8001
 echo "Iniciando o backend FastAPI na porta 8001..."
