@@ -36,7 +36,7 @@ def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""
     try:
         logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
-        model = whisper.load_model("small")  # Usando o modelo 'medium' para melhor precisão
+        model = whisper.load_model("medium")  # Usando o modelo 'medium' para melhor precisão
         result = model.transcribe(audio_path, verbose=True)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
@@ -97,62 +97,31 @@ def analyze_sentiment(text: str):
 def select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 24, max_duration: int = 60) -> list:
     """Seleciona os melhores segmentos com base na análise de sentimentos e duração."""
     selected_segments = []
-    
-    # Filtra segmentos com base na pontuação de sentimento
+
     for segment in segments:
         text = clean_text(segment['text'])
         label, score = analyze_sentiment(text)
         duration = segment['end'] - segment['start']
         
-        if score >= min_sentiment_score:
+        if score >= min_sentiment_score and min_duration <= duration <= max_duration:
             segment['sentiment'] = label
             segment['sentiment_score'] = score
             selected_segments.append(segment)
 
-    # Combina segmentos adjacentes em cortes
-    combined_segments = []
-    current_segment = []
-    current_duration = 0
-    current_start_time = 0  # Tempo de início do corte
+    # Ordena os segmentos pelo score de sentimento, do maior para o menor
+    selected_segments.sort(key=lambda x: x['sentiment_score'], reverse=True)
 
-    for segment in selected_segments:
-        if current_duration + (segment['end'] - segment['start']) <= max_duration:
-            if not current_segment:  # Se for o primeiro segmento
-                current_start_time = segment['start']
-            current_segment.append(segment)
-            current_duration += (segment['end'] - segment['start'])
-        else:
-            # Se já temos segmentos no corte atual, finalize o corte
-            if current_duration >= min_duration:  # Verifica se o corte é válido
-                combined_segments.append({
-                    'start': current_start_time,
-                    'end': current_segment[-1]['end'],  # Usa o fim do último segmento
-                    'text': ' '.join(seg['text'].strip() for seg in current_segment),
-                    'sentiment_score': sum(seg['sentiment_score'] for seg in current_segment)  # Soma a pontuação de sentimento
-                })
-            # Reinicia para o próximo corte
-            current_segment = [segment]
-            current_duration = (segment['end'] - segment['start'])
-            current_start_time = segment['start']
+    # Se houver menos de 5 segmentos, completa com os segmentos restantes, independente do score
+    if len(selected_segments) < max_segments:
+        logging.warning(f"Menos de {max_segments} segmentos atendem aos critérios. Selecionando segmentos adicionais.")
+        remaining_segments = [seg for seg in segments if seg not in selected_segments]
+        selected_segments += remaining_segments[:max_segments - len(selected_segments)]
 
-    # Adiciona o último conjunto de segmentos se for válido
-    if current_duration >= min_duration:
-        combined_segments.append({
-            'start': current_start_time,
-            'end': current_segment[-1]['end'],
-            'text': ' '.join(seg['text'].strip() for seg in current_segment),
-            'sentiment_score': sum(seg['sentiment_score'] for seg in current_segment)
-        })
+    # Seleciona até max_segments
+    final_segments = selected_segments[:max_segments]
 
-    # Classifica os cortes por pontuação de sentimento
-    ranked_segments = sorted(combined_segments, key=lambda seg: seg['sentiment_score'], reverse=True)
-
-    # Seleciona os melhores cortes até o limite especificado
-    final_segments = ranked_segments[:max_segments]
-
-    logging.info(f"Selecionados {len(final_segments)} cortes com duração entre {min_duration} e {max_duration} segundos.")
+    logging.info(f"Selecionados {len(final_segments)} segmentos com duração entre {min_duration} e {max_duration} segundos.")
     return final_segments
-
 
 def save_cuts(segments, video_path, output_dir, suffix):
     """Salva os grupos de segmentos como um arquivo SRT editado.""" 
@@ -178,7 +147,7 @@ def save_cuts(segments, video_path, output_dir, suffix):
         raise
 
 def transcribe_video(video_path, subtitle_output_dir, min_sentiment_score):
-    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos.""" 
+    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos."""
     try:
         audio_output_path = "temp_audio.wav"
         

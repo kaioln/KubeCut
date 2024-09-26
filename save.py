@@ -25,7 +25,7 @@ def extract_audio(video_path, audio_output_path):
 def transcribe_audio(audio_path):
     try:
         logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
-        model = whisper.load_model("base")  # Carregando o modelo base do Whisper
+        model = whisper.load_model("small")  # Carregando o modelo base do Whisper
         result = model.transcribe(audio_path, verbose=True)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
