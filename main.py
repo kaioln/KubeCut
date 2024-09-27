@@ -7,13 +7,18 @@ from datetime import datetime
 from transformers import pipeline
 import re
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 # Configuração do logging
 log_filename = "/mnt/c/Users/TI/Project/logs/process.log"
 logging.basicConfig(filename=log_filename, level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Inicializa o pipeline de análise de sentimentos
-sentiment_analyzer = pipeline("sentiment-analysis")
+sentiment_analyzer = pipeline(
+    "sentiment-analysis", 
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
 
 def clean_text(text):
     """Remove caracteres especiais e limpa o texto."""
@@ -94,8 +99,8 @@ def analyze_sentiment(text: str):
     result = sentiment_analyzer(text)[0]
     return result['label'], result['score']
 
-def select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 24, max_duration: int = 60) -> list:
-    """Seleciona os melhores segmentos com base na análise de sentimentos e duração."""
+def select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 60, max_duration: int = 90) -> list:
+    """Seleciona os melhores segmentos com base na análise de sentimentos e duração, garantindo cortes fluidos."""
     selected_segments = []
     
     # Filtra segmentos com base na pontuação de sentimento
@@ -116,11 +121,14 @@ def select_best_segments(segments: list, min_sentiment_score: float, max_segment
     current_start_time = 0  # Tempo de início do corte
 
     for segment in selected_segments:
-        if current_duration + (segment['end'] - segment['start']) <= max_duration:
+        segment_duration = segment['end'] - segment['start']
+        
+        # Se o segmento cabe no tempo máximo, adiciona ao corte atual
+        if current_duration + segment_duration <= max_duration:
             if not current_segment:  # Se for o primeiro segmento
                 current_start_time = segment['start']
             current_segment.append(segment)
-            current_duration += (segment['end'] - segment['start'])
+            current_duration += segment_duration
         else:
             # Se já temos segmentos no corte atual, finalize o corte
             if current_duration >= min_duration:  # Verifica se o corte é válido
@@ -128,20 +136,23 @@ def select_best_segments(segments: list, min_sentiment_score: float, max_segment
                     'start': current_start_time,
                     'end': current_segment[-1]['end'],  # Usa o fim do último segmento
                     'text': ' '.join(seg['text'].strip() for seg in current_segment),
-                    'sentiment_score': sum(seg['sentiment_score'] for seg in current_segment)  # Soma a pontuação de sentimento
+                    'sentiment_score': sum(seg['sentiment_score'] for seg in current_segment),
+                    'total_duration': current_duration  # Adiciona a duração total do corte
                 })
-            # Reinicia para o próximo corte
+            
+            # Reinicia o próximo corte
             current_segment = [segment]
-            current_duration = (segment['end'] - segment['start'])
+            current_duration = segment_duration
             current_start_time = segment['start']
 
-    # Adiciona o último conjunto de segmentos se for válido
+    # Adiciona o último grupo de segmentos se for válido
     if current_duration >= min_duration:
         combined_segments.append({
             'start': current_start_time,
             'end': current_segment[-1]['end'],
             'text': ' '.join(seg['text'].strip() for seg in current_segment),
-            'sentiment_score': sum(seg['sentiment_score'] for seg in current_segment)
+            'sentiment_score': sum(seg['sentiment_score'] for seg in current_segment),
+            'total_duration': current_duration  # Adiciona a duração total do corte
         })
 
     # Classifica os cortes por pontuação de sentimento
@@ -150,9 +161,8 @@ def select_best_segments(segments: list, min_sentiment_score: float, max_segment
     # Seleciona os melhores cortes até o limite especificado
     final_segments = ranked_segments[:max_segments]
 
-    logging.info(f"Selecionados {len(final_segments)} cortes com duração entre {min_duration} e {max_duration} segundos.")
+    logging.info(f"Selecionados {len(final_segments)} cortes com duração entre {min_duration/60:.2f} e {max_duration/60:.2f} minutos.")
     return final_segments
-
 
 def save_cuts(segments, video_path, output_dir, suffix):
     """Salva os grupos de segmentos como um arquivo SRT editado.""" 
@@ -167,8 +177,10 @@ def save_cuts(segments, video_path, output_dir, suffix):
             for i, segment in enumerate(segments):
                 start_time = format_time(segment['start'])
                 end_time = format_time(segment['end'])
+                # Calcula a duração do corte
+                cut_duration = segment['end'] - segment['start']
                 f.write(f"{i + 1}\n")
-                f.write(f"{start_time} --> {end_time}\n")
+                f.write(f"{start_time} --> {end_time} (Duração total: {format_time(cut_duration)})\n")
                 f.write(segment['text'].strip() + "\n\n")
 
         logging.info(f"Legenda editada salva com sucesso em: {subtitle_path}")
@@ -176,6 +188,7 @@ def save_cuts(segments, video_path, output_dir, suffix):
     except Exception as e:
         logging.error(f"Erro ao salvar a legenda editada: {e}")
         raise
+
 
 def transcribe_video(video_path, subtitle_output_dir, min_sentiment_score):
     """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos.""" 

@@ -1,6 +1,5 @@
-moviepy
-openai-whisper
-transformers
-happytransformer
-language_tool_python
-pyspellchecker
+moviepy==1.0.3
+whisper==1.0.0
+transformers==4.21.1
+torch==1.13.1
+logging==0.5.1.2
