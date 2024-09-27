@@ -1,4 +1,8 @@
-` # Video Transcription and Subtitle Generation  Este projeto realiza a transcrição de vídeos, extrai segmentos com base na análise de sentimentos e salva essas informações em arquivos de legenda no formato SRT. Utiliza a biblioteca Whisper para transcrição e MoviePy para manipulação de vídeos.  ## Instalação das Dependências  Para instalar as dependências necessárias, use o seguinte comando:  ```bash  pip install -r requirements.txt   `
+ # Video Transcription and Subtitle Generation  
+
+```Este projeto realiza a transcrição de vídeos, extrai segmentos com base na análise de sentimentos e salva essas informações em arquivos de legenda no formato SRT. Utiliza a biblioteca Whisper para transcrição e MoviePy para manipulação de vídeos.  ## Instalação das Dependências  Para instalar as dependências necessárias, use o seguinte comando: ```
+
+**pip install -r requirements.txt**
 
 ### Bibliotecas usadas:
 
