@@ -175,8 +175,28 @@ def save_cuts(segments, video_path, output_dir, suffix):
         logging.error(f"Erro ao salvar a legenda editada: {e}")
         raise
 
+def cut_video(video_path, segments, output_dir, margin=0.5):
+    """Corta o vídeo de acordo com os segmentos especificados."""
+    video = mp.VideoFileClip(video_path)
+    
+    for i, segment in enumerate(segments):
+        start_time = segment['start']
+        end_time = segment['end'] + margin  # Adiciona uma margem de tempo para evitar cortes abruptos
+        cut_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_cut_{i + 1}.mp4"
+        cut_path = os.path.join(output_dir, cut_filename)
+
+        logging.info(f"Cortando o vídeo de {format_time(start_time)} até {format_time(end_time)}.")
+        try:
+            video.subclip(start_time, end_time).write_videofile(cut_path, codec="libx264")
+            logging.info(f"Corte salvo em: {cut_path}")
+        except Exception as e:
+            logging.error(f"Erro ao cortar o vídeo: {e}")
+            raise
+
+    video.close()
+
 def transcribe_video(video_path, subtitle_output_dir, min_sentiment_score):
-    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos."""
+    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos, e corta o vídeo baseado nos segmentos selecionados."""
     audio_output_path = "temp_audio.wav"
     try:
         extract_audio(video_path, audio_output_path)
@@ -185,7 +205,11 @@ def transcribe_video(video_path, subtitle_output_dir, min_sentiment_score):
 
         if best_segments:
             cut_subtitle_path = save_cuts(best_segments, video_path, subtitle_output_dir, "Corte")
-            logging.info(f"Legendas editadas salvas em: {cut_subtitle_path}")  # Adicione este log
+            logging.info(f"Legendas editadas salvas em: {cut_subtitle_path}")
+
+            # Adicione aqui a chamada para cortar o vídeo
+            cut_video(video_path, best_segments, subtitle_output_dir)
+
         else:
             logging.warning("Nenhum segmento foi selecionado com base nos critérios definidos.")
             return None
