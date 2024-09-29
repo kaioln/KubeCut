@@ -5,7 +5,6 @@ desktop.ini
 
 # Arquivos de log
 *.log
-logs/
 *.out
 
 # Diretórios de ambiente virtual Python

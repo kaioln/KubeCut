@@ -7,13 +7,36 @@ import moviepy.editor as mp
 import whisper
 from transformers import pipeline
 
+# Caminho base do projeto
+BASE_DIR = "/mnt/c/Users/Kaio/workspace/jKpCutPro"
+SUBTITLE_DIR = os.path.join(BASE_DIR, "subtitles")
+CLIPS_DIR = os.path.join(BASE_DIR, "clips")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+VIDEOS_DIR = os.path.join(BASE_DIR, "videos")
+
 # Configuração do logging
-log_filename = "/mnt/c/Users/TI/Project/logs/process.log"
+log_filename = os.path.join(LOGS_DIR, "process.log")
 logging.basicConfig(
     filename=log_filename,
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+def ensure_directories_exist():
+    """Garante que as pastas necessárias existam."""
+    directories = [
+        SUBTITLE_DIR,
+        CLIPS_DIR,
+        LOGS_DIR,
+        VIDEOS_DIR
+    ]
+
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+        logging.info(f"Pasta verificada/criada: {directory}")
+
+# Chamando a função para garantir que as pastas existem
+ensure_directories_exist()
 
 # Inicializa o pipeline de análise de sentimentos
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -42,7 +65,7 @@ def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""
     logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
     try:
-        model = whisper.load_model("base")  # Usando o modelo 'small' para melhor desempenho
+        model = whisper.load_model("base")
         result = model.transcribe(audio_path, verbose=True)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
@@ -57,18 +80,14 @@ def format_time(seconds):
     milliseconds = int((seconds - int(seconds)) * 1000)
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02},{milliseconds:03}"
 
-def get_next_subtitle_number(output_dir, base_name):
-    """Obtém o próximo número de legenda disponível para salvar."""
-    existing_files = [f for f in os.listdir(output_dir) if f.startswith(base_name) and f.endswith('.srt')]
-    numbers = [int(file.split('_')[-1].split('.')[0]) for file in existing_files if file.split('_')[-1].split('.')[0].isdigit()]
-    next_number = max(numbers, default=0) + 1
-    return f"{next_number:02}"
+def generate_unique_id():
+    """Gera um ID único baseado no timestamp."""
+    return datetime.now().strftime("%Y%m%d%H%M%S")
 
-def save_subtitles(segments, video_path, output_dir):
-    """Salva os segmentos transcritos como um arquivo SRT."""
+def save_subtitles(segments, video_path, output_dir, unique_id):
+    """Salva os segmentos transcritos como um arquivo SRT com ID único."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    subtitle_number = get_next_subtitle_number(output_dir, video_name)
-    subtitle_filename = f"{video_name}_{subtitle_number}.srt"
+    subtitle_filename = f"{video_name}_{unique_id}.srt"
     subtitle_path = os.path.join(output_dir, subtitle_filename)
 
     logging.info(f"Salvando a transcrição como legenda em: {subtitle_path}")
@@ -151,11 +170,10 @@ def create_combined_segment(current_segment, start_time):
         'total_duration': sum(seg['end'] - seg['start'] for seg in current_segment)
     }
 
-def save_cuts(segments, video_path, output_dir, suffix):
+def save_cuts(segments, video_path, output_dir, suffix, unique_id):
     """Salva os grupos de segmentos como um arquivo SRT editado."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    subtitle_number = get_next_subtitle_number(output_dir, video_name)
-    subtitle_filename = f"{video_name}_{subtitle_number}_{suffix}.srt"
+    subtitle_filename = f"{video_name}_{unique_id}_{suffix}.srt"
     subtitle_path = os.path.join(output_dir, subtitle_filename)
 
     logging.info(f"Salvando a legenda editada como: {subtitle_path}")
@@ -175,15 +193,20 @@ def save_cuts(segments, video_path, output_dir, suffix):
         logging.error(f"Erro ao salvar a legenda editada: {e}")
         raise
 
-def cut_video(video_path, segments, output_dir, margin=0.5):
-    """Corta o vídeo de acordo com os segmentos especificados."""
+def cut_video(video_path, segments, clips_output_base_dir, unique_id, margin=0.5):
+    """Corta o vídeo de acordo com os segmentos especificados e salva na subpasta com o ID único."""
+    
+    # Criar uma subpasta com o ID único na pasta "clips"
+    clips_output_dir = os.path.join(clips_output_base_dir, unique_id)
+    os.makedirs(clips_output_dir, exist_ok=True)  # Cria a subpasta com o ID
+
     video = mp.VideoFileClip(video_path)
     
     for i, segment in enumerate(segments):
         start_time = segment['start']
         end_time = segment['end'] + margin  # Adiciona uma margem de tempo para evitar cortes abruptos
         cut_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_cut_{i + 1}.mp4"
-        cut_path = os.path.join(output_dir, cut_filename)
+        cut_path = os.path.join(clips_output_dir, cut_filename)
 
         logging.info(f"Cortando o vídeo de {format_time(start_time)} até {format_time(end_time)}.")
         try:
@@ -191,51 +214,33 @@ def cut_video(video_path, segments, output_dir, margin=0.5):
             logging.info(f"Corte salvo em: {cut_path}")
         except Exception as e:
             logging.error(f"Erro ao cortar o vídeo: {e}")
-            raise
 
-    video.close()
-
-def transcribe_video(video_path, subtitle_output_dir, min_sentiment_score):
-    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos, e corta o vídeo baseado nos segmentos selecionados."""
-    audio_output_path = "temp_audio.wav"
+if __name__ == "__main__":
+    # Uso do script
+    video_path = sys.argv[1]
+    
+    # Criar arquivos necessários
+    unique_id = generate_unique_id()
+    audio_output_path = os.path.join(BASE_DIR, f"{unique_id}_audio.wav")
+    
     try:
         extract_audio(video_path, audio_output_path)
         segments = transcribe_audio(audio_output_path)
-        best_segments = select_best_segments(segments, min_sentiment_score)
+        
+        # Selecionar os melhores segmentos
+        selected_segments = select_best_segments(segments, min_sentiment_score=0.5)
 
-        if best_segments:
-            cut_subtitle_path = save_cuts(best_segments, video_path, subtitle_output_dir, "Corte")
-            logging.info(f"Legendas editadas salvas em: {cut_subtitle_path}")
+        # Salvar os cortes de vídeo com o único arquivo SRT
+        save_cuts(selected_segments, video_path, SUBTITLE_DIR, "edited", unique_id)
+        cut_video(video_path, selected_segments, CLIPS_DIR, unique_id)
+    
+    except Exception as e:
+        logging.error(f"Ocorreu um erro no processamento do vídeo: {e}")
 
-            # Adicione aqui a chamada para cortar o vídeo
-            cut_video(video_path, best_segments, subtitle_output_dir)
-
-        else:
-            logging.warning("Nenhum segmento foi selecionado com base nos critérios definidos.")
-            return None
-
+    finally:
+        # Remover o arquivo de áudio temporário
         if os.path.exists(audio_output_path):
             os.remove(audio_output_path)
+            logging.info(f"Arquivo de áudio temporário removido: {audio_output_path}")
 
-        logging.info(f"Processo de transcrição concluído com sucesso. Legenda editada salva em: {cut_subtitle_path}")
-        return cut_subtitle_path
-    except Exception as e:
-        logging.error(f"Erro durante o processo de transcrição: {e}")
-        raise
 
-if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        logging.error("Uso incorreto. Deve ser: python3 main.py <video_path> <subtitle_output_dir> <min_sentiment_score>")
-        print("Uso: python3 main.py <video_path> <subtitle_output_dir> <min_sentiment_score>")
-        sys.exit(1)
-
-    video_path = sys.argv[1]
-    subtitle_output_dir = sys.argv[2]
-    min_sentiment_score = float(sys.argv[3])
-
-    try:
-        cut_subtitle_path = transcribe_video(video_path, subtitle_output_dir, min_sentiment_score)
-        print("Legenda editada salva em:", cut_subtitle_path)
-    except Exception as e:
-        logging.error(f"Falha ao processar o vídeo: {e}")
-        print("Ocorreu um erro. Verifique o arquivo de log para mais detalhes.")

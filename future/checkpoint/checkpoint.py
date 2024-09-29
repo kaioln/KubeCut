@@ -8,7 +8,7 @@ import whisper
 from transformers import pipeline
 
 # Configuração do logging
-log_filename = "/mnt/c/Users/TI/Project/logs/process.log"
+log_filename = "/mnt/c/Users/Kaio/workspace/jKpCutPro/logs/process.log"
 logging.basicConfig(
     filename=log_filename,
     level=logging.INFO,
@@ -175,31 +175,57 @@ def save_cuts(segments, video_path, output_dir, suffix):
         logging.error(f"Erro ao salvar a legenda editada: {e}")
         raise
 
+def cut_video(video_path, segments, output_dir, margin=0.5):
+    """Corta o vídeo de acordo com os segmentos especificados."""
+    
+    # Certifique-se de que o diretório de saída existe
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)  # Cria a pasta caso não exista
+    
+    video = mp.VideoFileClip(video_path)
+    
+    for i, segment in enumerate(segments):
+        start_time = segment['start']
+        end_time = segment['end'] + margin  # Adiciona uma margem de tempo para evitar cortes abruptos
+        cut_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_cut_{i + 1}.mp4"
+        cut_path = os.path.join(output_dir, cut_filename)
+
+        logging.info(f"Cortando o vídeo de {format_time(start_time)} até {format_time(end_time)}.")
+        try:
+            video.subclip(start_time, end_time).write_videofile(cut_path, codec="libx264")
+            logging.info(f"Corte salvo em: {cut_path}")
+        except Exception as e:
+            logging.error(f"Erro ao cortar o vídeo: {e}")
+            raise
+
+    video.close()
+
+
 def transcribe_video(video_path, subtitle_output_dir, min_sentiment_score):
-    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos."""
+    """Transcreve o vídeo e salva as legendas editadas com os melhores segmentos, e corta o vídeo baseado nos segmentos selecionados."""
     audio_output_path = "temp_audio.wav"
-    try:
-        extract_audio(video_path, audio_output_path)
-        segments = transcribe_audio(audio_output_path)
-        best_segments = select_best_segments(segments, min_sentiment_score)
-
-        if best_segments:
-            cut_subtitle_path = save_cuts(best_segments, video_path, subtitle_output_dir, "Corte")
-            logging.info(f"Legendas editadas salvas em: {cut_subtitle_path}")  # Adicione este log
-        else:
-            logging.warning("Nenhum segmento foi selecionado com base nos critérios definidos.")
-            return None
-
-        if os.path.exists(audio_output_path):
-            os.remove(audio_output_path)
-
-        logging.info(f"Processo de transcrição concluído com sucesso. Legenda editada salva em: {cut_subtitle_path}")
-        return cut_subtitle_path
-    except Exception as e:
-        logging.error(f"Erro durante o processo de transcrição: {e}")
-        raise
+    extract_audio(video_path, audio_output_path)
+    
+    segments = transcribe_audio(audio_output_path)
+    
+    # Remove a chamada para salvar a legenda original
+    # subtitle_path = save_subtitles(segments, video_path, subtitle_output_dir)
+    
+    best_segments = select_best_segments(segments, min_sentiment_score)
+    
+    # Salva apenas a legenda editada
+    cut_subtitle_path = save_subtitles(best_segments, video_path, subtitle_output_dir)
+    
+    clips_output_dir = "/mnt/c/Users/Kaio/workspace/jKpCutPro/clips"
+    cut_video(video_path, best_segments, clips_output_dir)
+    
+    os.remove(audio_output_path)
+    
+    return cut_subtitle_path  # Retorna o caminho da legenda editada
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
     if len(sys.argv) != 4:
         logging.error("Uso incorreto. Deve ser: python3 main.py <video_path> <subtitle_output_dir> <min_sentiment_score>")
         print("Uso: python3 main.py <video_path> <subtitle_output_dir> <min_sentiment_score>")
@@ -215,3 +241,4 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"Falha ao processar o vídeo: {e}")
         print("Ocorreu um erro. Verifique o arquivo de log para mais detalhes.")
+
