@@ -1,86 +1,115 @@
-## jKpCutPro
+jKpCutPro
+---------
 
+Descrição
+---------
 
-## Descrição
-Este projeto é responsável por transcrever vídeos, extrair áudio, analisar sentimentos e criar cortes com base nos melhores segmentos do conteúdo, salvando as legendas e os vídeos cortados de forma organizada.
+Este projeto é responsável por transcrever vídeos, extrair áudio, analisar sentimentos e criar cortes com base nos melhores segmentos do conteúdo, salvando as legendas e os vídeos cortados de forma organizada. O sistema utiliza modelos de aprendizado de máquina para análises detalhadas, oferecendo uma experiência de edição eficiente.
 
+Estrutura do Projeto
+--------------------
 
-## Estrutura do Projeto
-- `main.py`: Script principal para transcrição e edição de vídeos.
-- `start.sh`: Script para iniciar o processo.
-- `subtitles/`: Pasta onde as legendas transcritas serão salvas.
-- `videos/`: Pasta onde os vídeos a serem processados devem ser colocados.
-- `clips/`: Pasta onde os vídeos cortados serão salvos.
-- `logs/`: Pasta onde os logs do processo serão armazenados.
+*   main.py: Script principal para transcrição e edição de vídeos.
+    
+*   start.sh: Script para iniciar o processo.
+    
+*   subtitles/: Pasta onde as legendas transcritas serão salvas.
+    
+*   clips/: Pasta onde os vídeos cortados serão salvos.
+    
+*   logs/: Pasta onde os logs do processo serão armazenados.
+    
+*   videos/: Pasta onde os vídeos a serem processados devem ser colocados.
+    
+*   config.json: Arquivo de configuração para modelos e parâmetros de processamento.
+    
 
+Funções
+-------
 
-## Funções
+### load\_config()
 
+Carrega as configurações do arquivo JSON.
 
-### `clean_text(text)`
+### ensure\_directories\_exist()
+
+Garante que as pastas necessárias existam antes de configurar o logging.
+
+### clean\_text(text)
+
 Remove caracteres especiais e limpa o texto.
 
+### extract\_audio(video\_path, audio\_output\_path)
 
-### `extract_audio(video_path, audio_output_path)`
 Extrai o áudio de um vídeo e salva em um arquivo.
 
+### transcribe\_audio(audio\_path)
 
-### `transcribe_audio(audio_path)`
 Transcreve o áudio utilizando o modelo Whisper.
 
+### format\_time(seconds)
 
-### `format_time(seconds)`
 Formata o tempo em segundos para o formato SRT.
 
+### generate\_unique\_id()
 
-### `get_next_subtitle_number(output_dir, base_name)`
-Obtém o próximo número de legenda disponível para salvar.
+Gera um ID único baseado no timestamp.
 
+### save\_subtitles(segments, video\_path, output\_dir, unique\_id)
 
-### `save_subtitles(segments, video_path, output_dir)`
-Salva os segmentos transcritos como um arquivo SRT.
+Salva os segmentos transcritos como um arquivo SRT com ID único.
 
+### analyze\_sentiment(text: str)
 
-### `analyze_sentiment(text: str)`
 Analisa o sentimento de um texto e retorna o rótulo e o score.
 
+### extract\_topics(segments, num\_topics=5, num\_keywords=10)
 
-### `select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 60, max_duration: int = 90) -> list`
+Extrai tópicos dos segmentos transcritos utilizando o LDA (Latent Dirichlet Allocation).
+
+### select\_best\_segments(segments: list, min\_sentiment\_score: float, max\_segments: int = 5, min\_duration: int = 60, max\_duration: int = 90) -> list
+
 Seleciona os melhores segmentos com base na análise de sentimentos e duração, garantindo cortes fluidos.
 
+### combine\_segments(selected\_segments, min\_duration, max\_duration, max\_segments)
 
-### `combine_segments(selected_segments, min_duration, max_duration, max_segments)`
 Combina segmentos adjacentes em cortes válidos.
 
+### create\_combined\_segment(current\_segment, start\_time)
 
-### `create_combined_segment(current_segment, start_time)`
 Cria um segmento combinado a partir de segmentos atuais.
 
+### save\_cuts(segments, video\_path, output\_dir, unique\_id)
 
-### `save_cuts(segments, video_path, output_dir, suffix)`
-Salva os grupos de segmentos como um arquivo SRT editado e salva os vídeos cortados em ordem e organizados.
+Salva os grupos de segmentos como arquivos SRT editados e salva os vídeos cortados em ordem e organizados.
 
+### main(video\_path)
 
-### `transcribe_video(video_path, subtitle_output_dir, min_sentiment_score)`
-Transcreve o vídeo e salva as legendas editadas com os melhores segmentos, cortando o vídeo de acordo com os timings gerados.
+Função principal que orquestra a extração, transcrição, análise e corte de vídeo.
 
+Como Usar
+---------
 
-## Como Usar
-1. Coloque os vídeos que deseja processar na pasta `videos/`.
-2. Altere os caminhos no arquivo `start.sh` e no começo do `main.py`.
-3. Crie o comando `./start.sh` usando o código: `chmod +x start.sh`
-4. Execute o script usando `./start.sh` no terminal.
-5. As legendas e os vídeos cortados serão salvos nas pastas `subtitles/` e `clips/`, respectivamente.
-. Os logs do processo podem ser encontrados na pasta `logs/`.
+1.  Coloque os vídeos que deseja processar na pasta videos/.
+    
+2.  Altere os caminhos no arquivo start.sh e no começo do main.py.
+    
+3.  Crie o comando chmod +x start.sh para tornar o script executável.
+    
+4.  Execute o script usando ./start.sh no terminal.
+    
+5.  As legendas e os vídeos cortados serão salvos nas pastas subtitles/ e clips/, respectivamente.
+    
+6.  Os logs do processo podem ser encontrados na pasta logs/.
+    
 
+Caminhos
+--------
 
-## Caminhos
-```bash
-
-<caminho_do_video>: O caminho para o vídeo que você deseja processar.
-<caminho_do_output>: O diretório onde as legendas e cortes serão salvos.
-<ponto_de_corte>: O valor mínimo do score de sentimento para considerar um segmento.
+Plain 
+`O caminho para o vídeo que você deseja processar.  : O diretório onde as legendas e cortes serão salvos.  : O valor mínimo do score de sentimento para considerar um segmento.   `
 
 Logs
-Os logs do processo serão salvos no arquivo logs/process.log, onde você pode verificar detalhes sobre a execução e possíveis erros.
+----
 
+Os logs do processo serão salvos no arquivo logs/process.log, onde você pode verificar detalhes sobre a execução e possíveis erros.
