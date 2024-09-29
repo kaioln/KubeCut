@@ -8,22 +8,14 @@ import whisper
 from transformers import pipeline
 
 # Caminho base do projeto
-BASE_DIR = "/mnt/c/Users/Kaio/workspace/jKpCutPro"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUBTITLE_DIR = os.path.join(BASE_DIR, "subtitles")
 CLIPS_DIR = os.path.join(BASE_DIR, "clips")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 VIDEOS_DIR = os.path.join(BASE_DIR, "videos")
 
-# Configuração do logging
-log_filename = os.path.join(LOGS_DIR, "process.log")
-logging.basicConfig(
-    filename=log_filename,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 def ensure_directories_exist():
-    """Garante que as pastas necessárias existam."""
+    """Garante que as pastas necessárias existam antes de configurar o logging."""
     directories = [
         SUBTITLE_DIR,
         CLIPS_DIR,
@@ -33,10 +25,17 @@ def ensure_directories_exist():
 
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
-        logging.info(f"Pasta verificada/criada: {directory}")
 
-# Chamando a função para garantir que as pastas existem
+# Chama a função para garantir que as pastas existem antes de configurar o logging
 ensure_directories_exist()
+
+# Configuração do logging
+log_filename = os.path.join(LOGS_DIR, "process.log")
+logging.basicConfig(
+    filename=log_filename,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Inicializa o pipeline de análise de sentimentos
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -170,10 +169,10 @@ def create_combined_segment(current_segment, start_time):
         'total_duration': sum(seg['end'] - seg['start'] for seg in current_segment)
     }
 
-def save_cuts(segments, video_path, output_dir, suffix, unique_id):
+def save_cuts(segments, video_path, output_dir, unique_id):
     """Salva os grupos de segmentos como um arquivo SRT editado."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    subtitle_filename = f"{video_name}_{unique_id}_{suffix}.srt"
+    subtitle_filename = f"{video_name}_{unique_id}.srt"
     subtitle_path = os.path.join(output_dir, subtitle_filename)
 
     logging.info(f"Salvando a legenda editada como: {subtitle_path}")
@@ -200,40 +199,44 @@ def cut_video(video_path, segments, clips_output_base_dir, unique_id, margin=0.5
     clips_output_dir = os.path.join(clips_output_base_dir, unique_id)
     os.makedirs(clips_output_dir, exist_ok=True)  # Cria a subpasta com o ID
 
-    video = mp.VideoFileClip(video_path)
-    
-    for i, segment in enumerate(segments):
-        start_time = segment['start']
-        end_time = segment['end'] + margin  # Adiciona uma margem de tempo para evitar cortes abruptos
-        cut_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_cut_{i + 1}.mp4"
-        cut_path = os.path.join(clips_output_dir, cut_filename)
+    with mp.VideoFileClip(video_path) as video:
+        for i, segment in enumerate(segments):
+            start_time = segment['start']
+            end_time = segment['end'] + margin  # Adiciona uma margem de tempo para evitar cortes abruptos
+            cut_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_cut_{i + 1}.mp4"
+            cut_path = os.path.join(clips_output_dir, cut_filename)
 
-        logging.info(f"Cortando o vídeo de {format_time(start_time)} até {format_time(end_time)}.")
-        try:
-            video.subclip(start_time, end_time).write_videofile(cut_path, codec="libx264")
-            logging.info(f"Corte salvo em: {cut_path}")
-        except Exception as e:
-            logging.error(f"Erro ao cortar o vídeo: {e}")
+            logging.info(f"Cortando o vídeo de {format_time(start_time)} até {format_time(end_time)}.")
+            try:
+                video.subclip(start_time, end_time).write_videofile(cut_path, codec="libx264")
+                logging.info(f"Corte salvo em: {cut_path}")
+            except Exception as e:
+                logging.error(f"Erro ao cortar o vídeo: {e}")
 
-if __name__ == "__main__":
-    # Uso do script
-    video_path = sys.argv[1]
-    
-    # Criar arquivos necessários
+def main(video_path, min_sentiment_score=0.5):
+    """Processa o vídeo para extrair áudio, transcrever, analisar sentimentos e gerar cortes."""
+    ensure_directories_exist()
+
+    # Verifica se o arquivo de vídeo existe
+    if not os.path.isfile(video_path):
+        logging.error(f"O arquivo de vídeo não foi encontrado: {video_path}")
+        sys.exit(1)
+
     unique_id = generate_unique_id()
-    audio_output_path = os.path.join(BASE_DIR, f"{unique_id}_audio.wav")
-    
+    audio_output_path = os.path.join(VIDEOS_DIR, f"{unique_id}_audio.wav")
+
     try:
+        # Extração do áudio e transcrição
         extract_audio(video_path, audio_output_path)
         segments = transcribe_audio(audio_output_path)
-        
-        # Selecionar os melhores segmentos
-        selected_segments = select_best_segments(segments, min_sentiment_score=0.5)
 
-        # Salvar os cortes de vídeo com o único arquivo SRT
-        save_cuts(selected_segments, video_path, SUBTITLE_DIR, "edited", unique_id)
-        cut_video(video_path, selected_segments, CLIPS_DIR, unique_id)
-    
+        # Selecionar os melhores segmentos com base em sentimentos
+        best_segments = select_best_segments(segments, min_sentiment_score)
+
+        # Salva as legendas e os cortes em vídeo para os melhores segmentos
+        save_cuts(best_segments, video_path, SUBTITLE_DIR, unique_id)
+        cut_video(video_path, best_segments, CLIPS_DIR, unique_id)
+
     except Exception as e:
         logging.error(f"Ocorreu um erro no processamento do vídeo: {e}")
 
@@ -244,3 +247,12 @@ if __name__ == "__main__":
             logging.info(f"Arquivo de áudio temporário removido: {audio_output_path}")
 
 
+if __name__ == "__main__":
+    # Verifica se o script foi chamado com um caminho de vídeo
+    if len(sys.argv) < 2:
+        print("Uso: ./start.sh <caminho_do_video>")
+        sys.exit(1)
+
+    # Processa o vídeo chamando a função principal
+    video_path = sys.argv[1]
+    main(video_path)
