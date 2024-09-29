@@ -1,12 +1,12 @@
-jKpCutPro
+## jKpCutPro
 ---------
 
-Descrição
+## Descrição
 ---------
 
 Este projeto é responsável por transcrever vídeos, extrair áudio, analisar sentimentos e criar cortes com base nos melhores segmentos do conteúdo, salvando as legendas e os vídeos cortados de forma organizada. O sistema utiliza modelos de aprendizado de máquina para análises detalhadas, oferecendo uma experiência de edição eficiente.
 
-Estrutura do Projeto
+## Estrutura do Projeto
 --------------------
 
 *   main.py: Script principal para transcrição e edição de vídeos.
@@ -24,7 +24,7 @@ Estrutura do Projeto
 *   config.json: Arquivo de configuração para modelos e parâmetros de processamento.
     
 
-Funções
+## Funções
 -------
 
 ### load\_config()
@@ -105,11 +105,11 @@ Como Usar
 
 Caminhos
 --------
+`O caminho para o vídeo que você deseja processar.`
+`O diretório onde as legendas e cortes serão salvos.`
+`O valor mínimo do score de sentimento para considerar um segmento.`
 
-Plain 
-`O caminho para o vídeo que você deseja processar.  : O diretório onde as legendas e cortes serão salvos.  : O valor mínimo do score de sentimento para considerar um segmento.   `
-
-Logs
+## Logs
 ----
 
-Os logs do processo serão salvos no arquivo logs/process.log, onde você pode verificar detalhes sobre a execução e possíveis erros.
+`Os logs do processo serão salvos no arquivo logs/process.log, onde você pode verificar detalhes sobre a execução e possíveis erros.`
