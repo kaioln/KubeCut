@@ -10,6 +10,12 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 from pathlib import Path
 import json
+import warnings
+from transformers import logging as hf_logging
+
+# Suprimir avisos da biblioteca transformers
+hf_logging.set_verbosity_error()
+warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
 # Caminho base do projeto
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,7 +52,20 @@ logging.basicConfig(
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sentiment_analyzer = pipeline("sentiment-analysis", model=config['sentiment_model'])
 emotion_analyzer = pipeline("text-classification", model=config['emotion_model'])
-ner_analyzer = pipeline("ner", model=config['ner_model'], aggregation_strategy="simple")
+
+# Carrega o modelo de NER com ajuste para ignorar pesos não correspondentes
+from transformers import BertForTokenClassification, BertTokenizer
+
+ner_model = BertForTokenClassification.from_pretrained(
+    config['ner_model'],
+    ignore_mismatched_sizes=True
+)
+
+# Carrega o tokenizer correspondente ao modelo NER
+ner_tokenizer = BertTokenizer.from_pretrained(config['ner_model'])
+
+# Inicializa o pipeline de NER com o modelo e tokenizer especificados
+ner_analyzer = pipeline("ner", model=ner_model, tokenizer=ner_tokenizer, aggregation_strategy="simple")
 
 def clean_text(text):
     """Remove caracteres especiais e limpa o texto."""
