@@ -8,45 +8,35 @@ import whisper
 from transformers import pipeline
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
-from pathlib import Path
-import json
 
 # Caminho base do projeto
-BASE_DIR = Path(__file__).resolve().parent
-SUBTITLE_DIR = BASE_DIR / "subtitles"
-CLIPS_DIR = BASE_DIR / "clips"
-LOGS_DIR = BASE_DIR / "logs"
-VIDEOS_DIR = BASE_DIR / "videos"
-
-def load_config():
-    """Carrega as configurações do arquivo JSON."""
-    with open('config.json', 'r') as f:
-        return json.load(f)
-
-# Carrega as configurações
-config = load_config()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SUBTITLE_DIR = os.path.join(BASE_DIR, "subtitles")
+CLIPS_DIR = os.path.join(BASE_DIR, "clips")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+VIDEOS_DIR = os.path.join(BASE_DIR, "videos")
 
 def ensure_directories_exist():
     """Garante que as pastas necessárias existam antes de configurar o logging."""
     directories = [SUBTITLE_DIR, CLIPS_DIR, LOGS_DIR, VIDEOS_DIR]
     for directory in directories:
-        directory.mkdir(parents=True, exist_ok=True)
+        os.makedirs(directory, exist_ok=True)
 
 ensure_directories_exist()
 
 # Configuração do logging
-log_filename = LOGS_DIR / "process.log"
+log_filename = os.path.join(LOGS_DIR, "process.log")
 logging.basicConfig(
     filename=log_filename,
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Inicializa os pipelines com base nas configurações
+# Inicializa os pipelines
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-sentiment_analyzer = pipeline("sentiment-analysis", model=config['sentiment_model'])
-emotion_analyzer = pipeline("text-classification", model=config['emotion_model'])
-ner_analyzer = pipeline("ner", model=config['ner_model'], aggregation_strategy="simple")
+sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+ner_analyzer = pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")
+emotion_analyzer = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base")
 
 def clean_text(text):
     """Remove caracteres especiais e limpa o texto."""
@@ -56,9 +46,9 @@ def extract_audio(video_path, audio_output_path):
     """Extrai o áudio de um vídeo e salva em um arquivo."""
     logging.info(f"Extraindo áudio do vídeo: {video_path}")
     try:
-        video = mp.VideoFileClip(str(video_path))
+        video = mp.VideoFileClip(video_path)
         audio = video.audio
-        audio.write_audiofile(str(audio_output_path))
+        audio.write_audiofile(audio_output_path)
         logging.info(f"Áudio extraído e salvo em: {audio_output_path}")
     except Exception as e:
         logging.error(f"Erro ao extrair áudio: {e}")
@@ -68,8 +58,8 @@ def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""
     logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
     try:
-        model = whisper.load_model(config['whisper_model'])
-        result = model.transcribe(str(audio_path), verbose=True)
+        model = whisper.load_model("base")
+        result = model.transcribe(audio_path, verbose=True)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
     except Exception as e:
@@ -91,7 +81,7 @@ def save_subtitles(segments, video_path, output_dir, unique_id):
     """Salva os segmentos transcritos como um arquivo SRT com ID único."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     subtitle_filename = f"{video_name}_{unique_id}.srt"
-    subtitle_path = output_dir / subtitle_filename
+    subtitle_path = os.path.join(output_dir, subtitle_filename)
 
     logging.info(f"Salvando a transcrição como legenda em: {subtitle_path}")
     try:
@@ -124,8 +114,17 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
         raise ValueError("O número de segmentos é muito pequeno para extrair tópicos.")
 
     # Ajuste dinâmico de min_df e max_df
-    min_df = max(1, num_documents // 10)  # Ajusta min_df baseado em uma fração dos documentos
-    max_df = min(0.95, num_documents - 1)  # Ajusta max_df para evitar conflitos
+    min_df = 2
+    max_df = 0.95
+
+    if num_documents < min_df:
+        min_df = 1  # Se houver poucos documentos, o min_df é ajustado para 1
+    if min_df >= num_documents:
+        min_df = num_documents - 1 if num_documents > 1 else 1  # Evitar conflito com max_df
+
+    # Verificar se max_df é viável para o número de documentos
+    if num_documents < 5:
+        max_df = 0.85  # Diminuir max_df se houver poucos documentos
 
     try:
         vectorizer = CountVectorizer(max_df=max_df, min_df=min_df, stop_words='english')
@@ -142,7 +141,7 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
         return topics
 
     except ValueError as e:
-        logging.error(f"Erro ao ajustar o vectorizer: {str(e)}")
+        print(f"Erro ao ajustar o vectorizer: {str(e)}")
         return []
 
 def select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 60, max_duration: int = 90) -> list:
@@ -209,63 +208,83 @@ def create_combined_segment(current_segment, start_time):
 def save_cuts(segments, video_path, output_dir, unique_id):
     """Salva os grupos de segmentos como um arquivo SRT editado."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    clip_subdir = output_dir / f"{unique_id}"  # Nome da subpasta com base no unique_id
-    clip_subdir.mkdir(parents=True, exist_ok=True)  # Cria a subpasta se não existir
+    subtitle_filename = f"{video_name}_{unique_id}.srt"
+    subtitle_path = os.path.join(output_dir, subtitle_filename)
+
+    logging.info(f"Salvando a legenda editada como: {subtitle_path}")
+    try:
+        with open(subtitle_path, 'w') as f:
+            for i, segment in enumerate(segments):
+                start_time = format_time(segment['start'])
+                end_time = format_time(segment['end'])
+                cut_duration = segment['end'] - segment['start']
+                f.write(f"{i + 1}\n")
+                f.write(f"{start_time} --> {end_time} (Duração total: {format_time(cut_duration)})\n")
+                f.write(segment['text'].strip() + "\n\n")
+
+        logging.info(f"Legenda editada salva com sucesso em: {subtitle_path}")
+        return subtitle_path
+    except Exception as e:
+        logging.error(f"Erro ao salvar a legenda editada: {e}")
+        raise
+
+def cut_video(video_path, segments, clips_output_base_dir, unique_id, margin=0.5):
+    """Corta o vídeo de acordo com os segmentos especificados e salva na subpasta com o ID único."""
+    
+    # Criar uma subpasta com o ID único na pasta "clips"
+    output_dir = os.path.join(clips_output_base_dir, unique_id)
+    os.makedirs(output_dir, exist_ok=True)
+
+    logging.info(f"Cortando vídeo: {video_path}")
+    video = mp.VideoFileClip(video_path)
 
     for i, segment in enumerate(segments):
-        cut_filename = f"{video_name}_cut_{unique_id}_{i+1}.mp4"
-        cut_path = clip_subdir / cut_filename  # Usar a subpasta para salvar os clips
+        start_time = max(0, segment['start'] - margin)  # Garantir que não seja negativo
+        end_time = segment['end'] + margin
+        output_filename = os.path.join(output_dir, f"{unique_id}_clip_{i + 1}.mp4")
 
-        start_time = segment['start']
-        end_time = segment['end']
-        logging.info(f"Cortando vídeo de {start_time} a {end_time}, salvando como: {cut_path}")
+        logging.info(f"Cortando segmento: {start_time:.2f} - {end_time:.2f} e salvando como {output_filename}")
+        video.subclip(start_time, end_time).write_videofile(output_filename, codec="libx264", audio_codec="aac")
 
+    video.close()
+    logging.info(f"Cortes de vídeo salvos em: {output_dir}")
+
+def delete_audio_file(audio_path):
+    """Remove o arquivo de áudio após o término do processo."""
+    if os.path.exists(audio_path):
         try:
-            video = mp.VideoFileClip(str(video_path)).subclip(start_time, end_time)
-            video.write_videofile(str(cut_path), codec='libx264', audio_codec='aac', remove_temp=True)
-            logging.info(f"Corte salvo com sucesso em: {cut_path}")
+            os.remove(audio_path)
+            logging.info(f"Arquivo de áudio {audio_path} removido com sucesso.")
         except Exception as e:
-            logging.error(f"Erro ao salvar o corte: {e}")
-            raise
+            logging.error(f"Erro ao tentar remover o arquivo de áudio {audio_path}: {e}")
 
-def main(video_path):
-    """Função principal que orquestra a extração, transcrição, análise e corte de vídeo."""
-    logging.info(f"Iniciando o processamento do vídeo: {video_path}")
-
+def main(video_path, min_sentiment_score=0.5, max_segments=5, min_duration=60, max_duration=90):
+    """Função principal para processar o vídeo e gerar legendas e cortes."""
     unique_id = generate_unique_id()
-    audio_output_path = SUBTITLE_DIR / f"audio_{unique_id}.mp3"
+    audio_path = os.path.join(VIDEOS_DIR, f"{unique_id}.mp3")
 
-    # Ler configurações antes de usar
-    min_sentiment_score = config['video_processing']['min_sentiment_score']
-    max_segments = config['video_processing']['max_segments']
+    # Extraindo áudio
+    extract_audio(video_path, audio_path)
 
-    # Processar o vídeo
-    extract_audio(video_path, audio_output_path)
-    segments = transcribe_audio(audio_output_path)
+    # Transcrevendo áudio
+    segments = transcribe_audio(audio_path)
 
-    # Selecionar os melhores segmentos antes de salvar as legendas
-    best_segments = select_best_segments(segments, min_sentiment_score, max_segments=max_segments)
+    # Selecionando os melhores segmentos
+    best_segments = select_best_segments(segments, min_sentiment_score, max_segments, min_duration, max_duration)
 
-    # Salvar legendas com base nos melhores segmentos
-    subtitle_path = save_subtitles(best_segments, video_path, SUBTITLE_DIR, unique_id)
+    # Salvando os cortes (legendas das melhores falas)
+    save_cuts(best_segments, video_path, SUBTITLE_DIR, unique_id)
 
-    # Salvar os cortes
-    save_cuts(best_segments, video_path, CLIPS_DIR, unique_id)
+    # Cortando vídeo com as melhores falas
+    cut_video(video_path, best_segments, CLIPS_DIR, unique_id)
 
-    # Limpeza final
-    os.remove(audio_output_path)
-    logging.info(f"Áudio temporário removido: {audio_output_path}")
-    logging.info("Processo concluído com sucesso.")
-
+    # Deletando o arquivo de áudio após o término do processo
+    delete_audio_file(audio_path)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Uso: python process_video.py <caminho_do_video>")
+        logging.error("Caminho do vídeo não fornecido.")
         sys.exit(1)
 
-    video_file_path = Path(sys.argv[1])
-    if not video_file_path.is_file():
-        print(f"O arquivo especificado não existe: {video_file_path}")
-        sys.exit(1)
-
-    main(video_file_path)
+    video_path = sys.argv[1]
+    main(video_path)
