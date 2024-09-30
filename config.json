@@ -1,21 +1,21 @@
 {
-    "video_processing": {
-      "min_sentiment_score": 0.5,
-      "num_topics": 5,
-      "num_keywords": 10,
-      "max_segments": 5,
-      "min_duration": 60,
-      "max_duration": 90
-    },
-    "directories": {
-      "subtitles": "subtitles",
-      "clips": "clips",
-      "logs": "logs",
-      "videos": "videos"
-    },
-    "whisper_model": "tiny",
-    "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",
-    "emotion_model": "j-hartmann/emotion-english-distilroberta-base",
-    "ner_model": "dbmdz/bert-large-cased-finetuned-conll03-english"
-  }
-  
+  "video_processing": {
+    "min_sentiment_score": 0.5,
+    "num_topics": 5,
+    "num_keywords": 10,
+    "max_segments": 5,
+    "min_duration": 60,
+    "max_duration": 90
+  },
+  "directories": {
+    "subtitles": "subtitles",
+    "clips": "clips",
+    "logs": "logs",
+    "videos": "videos",
+    "audio": "audio"
+  },
+  "whisper_model": "tiny",
+  "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",
+  "emotion_model": "j-hartmann/emotion-english-distilroberta-base",
+  "ner_model": "dbmdz/bert-large-cased-finetuned-conll03-english"
+}
