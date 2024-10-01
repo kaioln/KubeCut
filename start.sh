@@ -3,8 +3,16 @@
 # Caminho base do projeto
 BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Caminho do diretório de vídeos
-VIDEOS_DIR="$BASE_DIR/videos"
+# Carrega o arquivo de configuração config.json
+CONFIG_FILE="$BASE_DIR/config.json"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Arquivo de configuração config.json não encontrado."
+    exit 1
+fi
+
+# Diretórios definidos no config.json
+VIDEOS_DIR=$(jq -r '.directories.videos' "$CONFIG_FILE")
+VIDEOS_DIR="$BASE_DIR/$VIDEOS_DIR"
 
 # Verifica se o diretório de vídeos existe
 if [ ! -d "$VIDEOS_DIR" ]; then
@@ -12,16 +20,13 @@ if [ ! -d "$VIDEOS_DIR" ]; then
     exit 1
 fi
 
-# Define a pontuação mínima de sentimento (você pode ajustar este valor conforme necessário)
-MIN_SENTIMENT_SCORE=0.5
-
 # Loop para processar todos os arquivos de vídeo no diretório
 for VIDEO_PATH in "$VIDEOS_DIR"/*; do
-    # Verifica se o arquivo é um arquivo regular
-    if [ -f "$VIDEO_PATH" ]; then
+    # Verifica se o arquivo é um arquivo regular e se é um vídeo
+    if [ -f "$VIDEO_PATH" ] && [[ "$VIDEO_PATH" == *.mp4 || "$VIDEO_PATH" == *.mov ]]; then
         echo "Processando vídeo: $VIDEO_PATH"
-        # Chama o script Python com o caminho do vídeo e a pontuação mínima de sentimento como argumentos
-        python "$BASE_DIR/main.py" "$VIDEO_PATH" "$MIN_SENTIMENT_SCORE"
+        # Chama o script Python com o caminho do vídeo
+        python "$BASE_DIR/main.py" "$VIDEO_PATH"
     fi
 done
 

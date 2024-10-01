@@ -109,7 +109,7 @@ def generate_unique_id():
 def save_subtitles(segments, video_path, output_dir):
     """Salva os segmentos transcritos como um arquivo SRT na pasta subtitles."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    unique_id = generate_unique_id()
+    unique_id = generate_unique_id()  # ID único para o vídeo
     subtitle_filename = f"{video_name}_{unique_id}.srt"
     subtitle_path = output_dir / subtitle_filename
 
@@ -120,8 +120,9 @@ def save_subtitles(segments, video_path, output_dir):
                 start_time = format_time(segment['start'])
                 end_time = format_time(segment['end'])
                 text = segment['text']
+                segment_id = f"{video_name}_{unique_id}_{i + 1}"  # ID único para o segmento
 
-                f.write(f"{i + 1}\n")
+                f.write(f"{segment_id}\n")  # Escreve o ID do segmento
                 f.write(f"{start_time} --> {end_time}\n")
                 f.write(f"{text.strip()}\n\n")
 
@@ -131,10 +132,13 @@ def save_subtitles(segments, video_path, output_dir):
         logging.error(f"Erro ao salvar a legenda: {e}")
         raise
 
+
 def analyze_sentiment(text: str):
     """Analisa o sentimento de um texto e retorna o rótulo e o score."""    
     result = sentiment_analyzer(text)[0]
+    logging.info(f"Análise de sentimento: Texto: '{text}' | Rótulo: {result['label']} | Score: {result['score']}")
     return result['label'], result['score']
+
 
 def extract_topics(segments, num_topics=5, num_keywords=10):
     text_data = [segment['text'] for segment in segments if segment['text'].strip()]
@@ -143,12 +147,8 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
     if num_documents < 2:
         raise ValueError("O número de segmentos é muito pequeno para extrair tópicos.")
 
-    # Ajuste dinâmico de min_df e max_df
-    min_df = max(1, num_documents // 10)  # Ajusta min_df baseado em uma fração dos documentos
-    max_df = min(0.95, num_documents - 1)  # Ajusta max_df para evitar conflitos
-
     try:
-        vectorizer = CountVectorizer(max_df=max_df, min_df=min_df, stop_words='english')
+        vectorizer = CountVectorizer(max_df=0.95, min_df=1, stop_words='english')
         doc_term_matrix = vectorizer.fit_transform(text_data)
 
         lda = LatentDirichletAllocation(n_components=num_topics, random_state=42)
@@ -168,6 +168,7 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
 def select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 60, max_duration: int = 90) -> list:
     """Seleciona os melhores segmentos com base na análise de sentimentos e duração, garantindo cortes fluidos."""
     selected_segments = []
+    sentiment_summary = {'positive': 0, 'negative': 0}  # Inicializa o resumo de sentimentos
 
     # Extrair tópicos para todos os segmentos
     topics = extract_topics(segments)
@@ -175,7 +176,6 @@ def select_best_segments(segments: list, min_sentiment_score: float, max_segment
     for segment in segments:
         text = clean_text(segment['text'])
         label, score = analyze_sentiment(text)
-        duration = segment['end'] - segment['start']
 
         if score >= min_sentiment_score:
             segment['sentiment'] = label
@@ -183,10 +183,22 @@ def select_best_segments(segments: list, min_sentiment_score: float, max_segment
             segment['topics'] = topics
             selected_segments.append(segment)
 
+            # Log refinado: registra apenas o sentimento do segmento selecionado
+            logging.info(f"Selecionado: {label} ({score:.2f})")
+
+            # Incrementa o resumo de sentimentos
+            sentiment_summary[label] = sentiment_summary.get(label, 0) + 1  # Usa get para evitar KeyError
+
+    # Log geral sobre os segmentos selecionados
+    total_selected = len(selected_segments)
+    logging.info(f"{total_selected} segmentos selecionados: {sentiment_summary}")
+
     return combine_segments(selected_segments, min_duration, max_duration, max_segments)
 
+
+
 def combine_segments(selected_segments, min_duration, max_duration, max_segments):
-    """Combina segmentos adjacentes em cortes válidos."""
+    """Combina segmentos adjacentes em cortes válidos."""    
     combined_segments = []
     current_segment = []
     current_duration = 0
@@ -203,112 +215,92 @@ def combine_segments(selected_segments, min_duration, max_duration, max_segments
         else:
             if current_duration >= min_duration:
                 combined_segments.append(create_combined_segment(current_segment, current_start_time))
+                logging.info(f"Combinando segmentos: {[seg['text'] for seg in current_segment]} | Duração total: {current_duration}")
             current_segment = [segment]
             current_duration = segment_duration
             current_start_time = segment['start']
 
     if current_duration >= min_duration:
         combined_segments.append(create_combined_segment(current_segment, current_start_time))
+        logging.info(f"Combinando segmentos: {[seg['text'] for seg in current_segment]} | Duração total: {current_duration}")
 
     ranked_segments = sorted(combined_segments, key=lambda seg: seg['sentiment_score'], reverse=True)
-    final_segments = ranked_segments[:max_segments]
+    return ranked_segments[:max_segments]
 
-    logging.info(f"Selecionados {len(final_segments)} cortes com duração entre {min_duration/60:.2f} e {max_duration/60:.2f} minutos.")
-    return final_segments
+def create_combined_segment(segments, start_time):
+    """Cria um segmento combinado de vários segmentos menores."""
+    combined_text = " ".join([segment['text'] for segment in segments])
+    end_time = segments[-1]['end']
 
-def create_combined_segment(current_segment, start_time):
-    """Cria um segmento combinado a partir de segmentos atuais."""
-    end_time = current_segment[-1]['end']
-    combined_segment = {
+    return {
         'start': start_time,
         'end': end_time,
-        'text': ' '.join(seg['text'] for seg in current_segment),
-        'sentiment_score': max(seg['sentiment_score'] for seg in current_segment),
-        'sentiment': max(seg['sentiment'] for seg in current_segment),
-        'topics': [topic for seg in current_segment for topic in seg['topics']]
+        'text': combined_text,
+        'sentiment_score': segments[-1]['sentiment_score']
     }
-    return combined_segment
 
-def save_clips(video_file, segments, output_dir):
-    """Salva os clipes em subpastas baseadas em ID no diretório de saída."""
-    video_name = os.path.splitext(os.path.basename(video_file))[0]
-    for segment in segments:
-        unique_id = generate_unique_id()
-        clip_folder = output_dir / f"{video_name}_{unique_id}"
-        clip_folder.mkdir(parents=True, exist_ok=True)
+def save_clips(video_path, selected_segments):
+    """Salva os clipes selecionados na pasta clips."""
+    video_name = os.path.splitext(os.path.basename(video_path))[0]
+    clip_subfolder = CLIPS_DIR / video_name
+    clip_subfolder.mkdir(parents=True, exist_ok=True)
 
-        clip_filename = f"clip_{unique_id}.mp4"
-        clip_path = clip_folder / clip_filename
+    clips_saved = []
 
-        logging.info(f"Salvando clipe em: {clip_path}")
+    for i, segment in enumerate(selected_segments):
+        start_time = segment['start']
+        end_time = segment['end']
+        unique_id = generate_unique_id()  # ID único para o vídeo
+        clip_filename = f"{video_name}_{unique_id}_clip_{i + 1}.mp4"  # Inclui ID no nome do clipe
+        clip_path = clip_subfolder / clip_filename
+
         try:
-            video_clip = mp.VideoFileClip(str(video_file)).subclip(segment['start'], segment['end'])
-            video_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
-            logging.info(f"Clique salvo em: {clip_path}")
+            video = mp.VideoFileClip(str(video_path))
+            clip = video.subclip(start_time, end_time)
+            clip.write_videofile(str(clip_path), codec="libx264")
+            clips_saved.append(clip_path)
+            logging.info(f"Clip salvo: {clip_path}")
+
         except Exception as e:
-            logging.error(f"Erro ao salvar o clipe: {e}")
-            raise
+            logging.error(f"Erro ao salvar o clipe {clip_filename}: {e}")
 
-def process_video(video_file, whisper_model, min_sentiment_score, max_segments, min_duration, max_duration):
-    """Processa o vídeo e gera os clipes selecionados com base nos segmentos de áudio transcritos e analisados."""
-    logging.info(f"Iniciando o processamento do vídeo: {video_file}")
+    return clips_saved
 
-    audio_path = AUDIO_DIR / f"{video_file.stem}.mp3"
-    extract_audio(video_file, audio_path)
+def clean_up_audio_files():
+    """Remove todos os arquivos de áudio após o término do processo."""    
+    logging.info("Removendo arquivos de áudio...")
+    for audio_file in AUDIO_DIR.iterdir():
+        try:
+            audio_file.unlink()
+            logging.info(f"Arquivo de áudio removido: {audio_file}")
+        except Exception as e:
+            logging.error(f"Erro ao remover o arquivo de áudio {audio_file}: {e}")
 
-    segments = transcribe_audio(audio_path, whisper_model)
+def process_video(video_path):
+    """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""
+    audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}.mp3"
+    extract_audio(video_path, audio_output_path)
 
-    # Seleciona os melhores segmentos com base na análise de sentimentos
-    selected_segments = select_best_segments(segments, min_sentiment_score, max_segments, min_duration, max_duration)
+    # Carregar o modelo Whisper do config.json
+    whisper_model = whisper.load_model(config['whisper_model'])
+    segments = transcribe_audio(audio_output_path, whisper_model)
 
-    # Salva as legendas
-    save_subtitles(segments, video_file, SUBTITLE_DIR)
+    selected_segments = select_best_segments(
+        segments, 
+        config['video_processing']['min_sentiment_score'], 
+        max_segments=config.get('max_segments', 5)
+    )
 
-    # Salva os clipes
-    save_clips(video_file, selected_segments, CLIPS_DIR)
+    if selected_segments:
+        subtitle_path = save_subtitles(selected_segments, video_path, SUBTITLE_DIR)
+        clips_saved = save_clips(video_path, selected_segments)
+        
+        # Log inteligente e refinado
+        logging.info(f"Processamento concluído: {len(selected_segments)} segmentos escolhidos, {len(clips_saved)} clipes salvos.")
 
-    # Remover o áudio após o processamento
-    try:
-        if audio_path.exists():
-            audio_path.unlink()
-            logging.info(f"Áudio removido: {audio_path}")
-    except Exception as e:
-        logging.error(f"Erro ao remover o áudio: {e}")
+    clean_up_audio_files()
 
-def main(video_file_path):
-    """Função principal para processar os vídeos do diretório de entrada."""
-    try:
-        # Carregar o modelo Whisper
-        whisper_model = whisper.load_model(config['whisper_model'])
-
-        # Definir critérios de seleção dos segmentos
-        min_sentiment_score = config['video_processing']['min_sentiment_score']
-        max_segments = config['video_processing']['max_segments']
-        min_duration = config['video_processing']['min_duration']  # Duração mínima dos segmentos em segundos
-        max_duration = config['video_processing']['max_duration']  # Duração máxima dos segmentos em segundos
-
-        # Processar o vídeo específico
-        process_video(
-            video_file_path,
-            whisper_model,
-            min_sentiment_score,
-            max_segments,
-            min_duration,
-            max_duration
-        )
-
-    except Exception as e:
-        logging.error(f"Erro na execução principal: {e}")
-        sys.exit(1)
-
+# Chamando a função process_video com o caminho do vídeo
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python process_video.py <caminho_do_video>")
-        sys.exit(1)
-
-    video_file_path = Path(sys.argv[1])
-    if not video_file_path.is_file():
-        print(f"O arquivo especificado não existe: {video_file_path}")
-        sys.exit(1)
-
-    main(video_file_path)  # Passando o caminho do vídeo para a função main
+    video_file_path = sys.argv[1]
+    process_video(video_file_path)
