@@ -1,6 +1,6 @@
 {
   "video_processing": {
-    "min_sentiment_score": 1,
+    "min_sentiment_score": 0.8,
     "num_topics": 5,
     "num_keywords": 10,
     "min_duration": 60,

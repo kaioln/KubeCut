@@ -129,10 +129,13 @@ def save_subtitles(segments, video_path, output_dir):
                 start_time = format_time(segment['start'])
                 end_time = format_time(segment['end'])
                 text = segment['text']
+                duration = segment['end'] - segment['start']  # Cálculo da duração
+                duration_formatted = format_time(duration)  # Formata a duração
+
                 segment_id = f"{video_name}_{unique_id}_{i + 1}"  # ID único para o segmento
 
                 f.write(f"{segment_id}\n")  # Escreve o ID do segmento
-                f.write(f"{start_time} --> {end_time}\n")
+                f.write(f"{start_time} --> {end_time} (Duração: {duration_formatted})\n")  # Inclui a duração
                 f.write(f"{text.strip()}\n\n")
 
         logging.info(f"Legenda salva com sucesso em: {subtitle_path}")
@@ -140,7 +143,6 @@ def save_subtitles(segments, video_path, output_dir):
     except Exception as e:
         logging.error(f"Erro ao salvar a legenda: {e}")
         raise
-
 
 def analyze_sentiment(text: str):
     """Analisa o sentimento de um texto e retorna o rótulo e o score."""    
