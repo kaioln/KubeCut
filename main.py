@@ -19,11 +19,14 @@ warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
 # Caminho base do projeto
 BASE_DIR = Path(__file__).resolve().parent
+
+# Diretórios
 SUBTITLE_DIR = BASE_DIR / "subtitles"
 CLIPS_DIR = BASE_DIR / "clips"
 LOGS_DIR = BASE_DIR / "logs"
 VIDEOS_DIR = BASE_DIR / "videos"
 AUDIO_DIR = BASE_DIR / "audio"  # Diretório para o áudio extraído
+
 
 def load_config():
     """Carrega as configurações do arquivo JSON."""
@@ -51,6 +54,9 @@ logging.basicConfig(
 
 # Inicializa os pipelines com base nas configurações
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ['TEMP'] = str(AUDIO_DIR)
+os.environ['TMPDIR'] = str(AUDIO_DIR)
+os.environ['TMP'] = str(AUDIO_DIR)
 sentiment_analyzer = pipeline("sentiment-analysis", model=config['sentiment_model'])
 emotion_analyzer = pipeline("text-classification", model=config['emotion_model'])
 
@@ -73,16 +79,19 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
 def extract_audio(video_path, audio_output_path):
-    """Extrai o áudio de um vídeo e salva em um arquivo."""
+    """Extrai o áudio de um vídeo e salva em um arquivo temporário na pasta de áudio."""  
     logging.info(f"Extraindo áudio do vídeo: {video_path}")
     try:
         video = mp.VideoFileClip(str(video_path))
         audio = video.audio
-        audio.write_audiofile(str(audio_output_path))
+        
+        # Especificar o caminho de saída para o arquivo de áudio
+        audio.write_audiofile(str(audio_output_path), codec='mp3')  # Salvar na pasta de áudio
         logging.info(f"Áudio extraído e salvo em: {audio_output_path}")
     except Exception as e:
         logging.error(f"Erro ao extrair áudio: {e}")
         raise
+
 
 def transcribe_audio(audio_path, model):
     """Transcreve o áudio utilizando o modelo Whisper."""    
@@ -136,7 +145,7 @@ def save_subtitles(segments, video_path, output_dir):
 def analyze_sentiment(text: str):
     """Analisa o sentimento de um texto e retorna o rótulo e o score."""    
     result = sentiment_analyzer(text)[0]
-    logging.info(f"Análise de sentimento: Texto: '{text}' | Rótulo: {result['label']} | Score: {result['score']}")
+    # logging.info(f"Análise de sentimento: Texto: '{text}' | Rótulo: {result['label']} | Score: {result['score']}")
     return result['label'], result['score']
 
 
@@ -165,40 +174,60 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
         logging.error(f"Erro ao ajustar o vectorizer: {str(e)}")
         return []
 
-def select_best_segments(segments: list, min_sentiment_score: float, max_segments: int = 5, min_duration: int = 60, max_duration: int = 90) -> list:
-    """Seleciona os melhores segmentos com base na análise de sentimentos e duração, garantindo cortes fluidos."""
+def select_best_segments(segments: list, min_sentiment_score: float, min_duration: int = 60, max_duration: int = 90) -> list:
+    """Seleciona todos os segmentos com base na análise de sentimentos e duração, sem limite de quantidade."""
     selected_segments = []
-    sentiment_summary = {'positive': 0, 'negative': 0}  # Inicializa o resumo de sentimentos
+    sentiment_summary = {'positive': 0, 'negative': 0, 'neutral': 0}
 
     # Extrair tópicos para todos os segmentos
     topics = extract_topics(segments)
+    
+    segment_motives = []
 
     for segment in segments:
         text = clean_text(segment['text'])
         label, score = analyze_sentiment(text)
 
+        motivo = ""
         if score >= min_sentiment_score:
+            if score > 0.9:
+                motivo = "Sentimento extremamente positivo ou negativo"
+            elif 0.7 <= score <= 0.9:
+                motivo = "Sentimento moderado com relevância"
+            else:
+                motivo = "Pontuação de sentimento aceitável, alinhado com o contexto"
+
             segment['sentiment'] = label
             segment['sentiment_score'] = score
             segment['topics'] = topics
             selected_segments.append(segment)
 
-            # Log refinado: registra apenas o sentimento do segmento selecionado
-            logging.info(f"Selecionado: {label} ({score:.2f})")
+            segment_motives.append({
+                'texto': text[:30], 
+                'sentimento': label,
+                'score': score,
+                'motivo': motivo
+            })
 
-            # Incrementa o resumo de sentimentos
-            sentiment_summary[label] = sentiment_summary.get(label, 0) + 1  # Usa get para evitar KeyError
+            sentiment_summary[label] = sentiment_summary.get(label, 0) + 1
 
-    # Log geral sobre os segmentos selecionados
-    total_selected = len(selected_segments)
-    logging.info(f"{total_selected} segmentos selecionados: {sentiment_summary}")
+    logging.info(f"{len(selected_segments)} segmentos selecionados.")
+    logging.info(f"Resumo de sentimentos: {sentiment_summary}")
+    logging.info(f"Estilo predominante do vídeo: {max(sentiment_summary, key=sentiment_summary.get)}")
+    logging.info("Motivos para seleção dos segmentos:")
 
-    return combine_segments(selected_segments, min_duration, max_duration, max_segments)
+    # Combine os segmentos selecionados
+    combined_segments = combine_segments(selected_segments, min_duration, max_duration)
 
+    # Retorne apenas os segmentos que atendem ao critério de pontuação
+    ranked_segments = [seg for seg in combined_segments if seg['sentiment_score'] >= min_sentiment_score]
 
+    logging.info(f"Segmentos combinados finalizados: {len(ranked_segments)} selecionados.")
 
-def combine_segments(selected_segments, min_duration, max_duration, max_segments):
-    """Combina segmentos adjacentes em cortes válidos."""    
+    return ranked_segments
+
+def combine_segments(selected_segments, min_duration, max_duration):
+    """Combina segmentos adjacentes em cortes válidos, sem limitar a quantidade de segmentos."""    
     combined_segments = []
     current_segment = []
     current_duration = 0
@@ -224,8 +253,7 @@ def combine_segments(selected_segments, min_duration, max_duration, max_segments
         combined_segments.append(create_combined_segment(current_segment, current_start_time))
         logging.info(f"Combinando segmentos: {[seg['text'] for seg in current_segment]} | Duração total: {current_duration}")
 
-    ranked_segments = sorted(combined_segments, key=lambda seg: seg['sentiment_score'], reverse=True)
-    return ranked_segments[:max_segments]
+    return combined_segments  # Sem limitação de número de segmentos
 
 def create_combined_segment(segments, start_time):
     """Cria um segmento combinado de vários segmentos menores."""
@@ -239,10 +267,15 @@ def create_combined_segment(segments, start_time):
         'sentiment_score': segments[-1]['sentiment_score']
     }
 
+def generate_short_id():
+    """Gera um ID curto baseado em um timestamp."""    
+    return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]  # Retorna os primeiros 3 dígitos do milissegundos
+
 def save_clips(video_path, selected_segments):
-    """Salva os clipes selecionados na pasta clips."""
+    """Salva os clipes selecionados em uma nova pasta com um ID curto."""    
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    clip_subfolder = CLIPS_DIR / video_name
+    short_id = generate_short_id()  # Gera um ID curto
+    clip_subfolder = CLIPS_DIR / f"{video_name}_{short_id}"  # Nova pasta para os clipes
     clip_subfolder.mkdir(parents=True, exist_ok=True)
 
     clips_saved = []
@@ -250,8 +283,7 @@ def save_clips(video_path, selected_segments):
     for i, segment in enumerate(selected_segments):
         start_time = segment['start']
         end_time = segment['end']
-        unique_id = generate_unique_id()  # ID único para o vídeo
-        clip_filename = f"{video_name}_{unique_id}_clip_{i + 1}.mp4"  # Inclui ID no nome do clipe
+        clip_filename = f"{video_name}_clip_{i + 1}.mp4"  # Nome do clipe
         clip_path = clip_subfolder / clip_filename
 
         try:
@@ -267,9 +299,9 @@ def save_clips(video_path, selected_segments):
     return clips_saved
 
 def clean_up_audio_files():
-    """Remove todos os arquivos de áudio após o término do processo."""    
+    """Remove todos os arquivos de áudio após o término do processo, incluindo temporários."""
     logging.info("Removendo arquivos de áudio...")
-    for audio_file in AUDIO_DIR.iterdir():
+    for audio_file in AUDIO_DIR.glob('*'):
         try:
             audio_file.unlink()
             logging.info(f"Arquivo de áudio removido: {audio_file}")
@@ -279,26 +311,30 @@ def clean_up_audio_files():
 def process_video(video_path):
     """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""
     audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}.mp3"
-    extract_audio(video_path, audio_output_path)
+    try:
+        extract_audio(video_path, audio_output_path)
 
-    # Carregar o modelo Whisper do config.json
-    whisper_model = whisper.load_model(config['whisper_model'])
-    segments = transcribe_audio(audio_output_path, whisper_model)
+        # Carregar o modelo Whisper do config.json
+        whisper_model = whisper.load_model(config['whisper_model'])
+        segments = transcribe_audio(audio_output_path, whisper_model)
 
-    selected_segments = select_best_segments(
-        segments, 
-        config['video_processing']['min_sentiment_score'], 
-        max_segments=config.get('max_segments', 5)
-    )
+        selected_segments = select_best_segments(
+            segments, 
+            config['video_processing']['min_sentiment_score'], 
+        )
 
-    if selected_segments:
-        subtitle_path = save_subtitles(selected_segments, video_path, SUBTITLE_DIR)
-        clips_saved = save_clips(video_path, selected_segments)
-        
-        # Log inteligente e refinado
-        logging.info(f"Processamento concluído: {len(selected_segments)} segmentos escolhidos, {len(clips_saved)} clipes salvos.")
+        if selected_segments:
+            subtitle_path = save_subtitles(selected_segments, video_path, SUBTITLE_DIR)
+            clips_saved = save_clips(video_path, selected_segments)
 
-    clean_up_audio_files()
+            # Log resumido e final
+            logging.info(f"Processamento concluído: {len(selected_segments)} segmentos escolhidos, {len(clips_saved)} clipes salvos.")
+    
+    except Exception as e:
+        logging.error(f"Erro no processamento do vídeo: {e}")
+    finally:
+        # Limpar os arquivos de áudio mesmo em caso de erro
+        clean_up_audio_files()
 
 # Chamando a função process_video com o caminho do vídeo
 if __name__ == "__main__":
