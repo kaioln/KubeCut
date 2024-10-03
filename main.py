@@ -114,7 +114,7 @@ def format_time(seconds):
 def generate_unique_id():
     """Gera um ID único baseado no timestamp."""    
     return datetime.now().strftime("%Y%m%d%H%M%S")
-
+    
 def save_subtitles(segments, video_path, output_dir):
     """Salva os segmentos transcritos como um arquivo SRT na pasta subtitles."""
     video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -136,7 +136,7 @@ def save_subtitles(segments, video_path, output_dir):
 
                 f.write(f"{segment_id}\n")  # Escreve o ID do segmento
                 f.write(f"{start_time} --> {end_time} (Duração: {duration_formatted})\n")  # Inclui a duração
-                f.write(f"{text.strip()}\n\n")
+                f.write(f"Score: {segment['sentiment_score']:.2f} --> {text.strip()}\n\n")  # Score antes do texto
 
         logging.info(f"Legenda salva com sucesso em: {subtitle_path}")
         return subtitle_path
@@ -149,7 +149,6 @@ def analyze_sentiment(text: str):
     result = sentiment_analyzer(text)[0]
     # logging.info(f"Análise de sentimento: Texto: '{text}' | Rótulo: {result['label']} | Score: {result['score']}")
     return result['label'], result['score']
-
 
 def extract_topics(segments, num_topics=5, num_keywords=10):
     text_data = [segment['text'] for segment in segments if segment['text'].strip()]
