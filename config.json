@@ -9,7 +9,10 @@
   "directories": {
     "subtitles": "subtitles",
     "clips": "clips",
-    "logs": "logs",
+    "logs": {
+      "dir": "logs", 
+      "archive": "process.log"
+    },
     "videos": "videos",
     "audio": "audio"
   },

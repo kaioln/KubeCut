@@ -17,17 +17,6 @@ from transformers import logging as hf_logging
 hf_logging.set_verbosity_error()
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
-# Caminho base do projeto
-BASE_DIR = Path(__file__).resolve().parent
-
-# Diretórios
-SUBTITLE_DIR = BASE_DIR / "subtitles"
-CLIPS_DIR = BASE_DIR / "clips"
-LOGS_DIR = BASE_DIR / "logs"
-VIDEOS_DIR = BASE_DIR / "videos"
-AUDIO_DIR = BASE_DIR / "audio"  # Diretório para o áudio extraído
-
-
 def load_config():
     """Carrega as configurações do arquivo JSON."""
     with open('config.json', 'r') as f:
@@ -35,6 +24,16 @@ def load_config():
 
 # Carregar as configurações
 config = load_config()
+
+# Caminho base do projeto
+BASE_DIR = Path(__file__).resolve().parent
+
+# Diretórios
+SUBTITLE_DIR = BASE_DIR / config['directories']['subtitles']
+CLIPS_DIR = BASE_DIR / config['directories']['clips']
+LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
+VIDEOS_DIR = BASE_DIR / config['directories']['videos']
+AUDIO_DIR = BASE_DIR / config['directories']['audio']
 
 def ensure_directories_exist():
     """Garante que as pastas necessárias existam antes de configurar o logging."""
@@ -45,7 +44,7 @@ def ensure_directories_exist():
 ensure_directories_exist()
 
 # Configuração do logging
-log_filename = LOGS_DIR / "process.log"
+log_filename = LOGS_DIR / config['directories']['logs']['archive']
 logging.basicConfig(
     filename=log_filename,
     level=logging.INFO,
