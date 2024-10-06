@@ -6,12 +6,14 @@ from datetime import datetime
 import moviepy.editor as mp
 import whisper
 from transformers import pipeline
+from transformers import BertForTokenClassification, BertTokenizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 from pathlib import Path
 import json
 import warnings
 from transformers import logging as hf_logging
+from pathlib import Path
 
 # Supressão de avisos da biblioteca transformers
 hf_logging.set_verbosity_error()
@@ -34,6 +36,12 @@ CLIPS_DIR = BASE_DIR / config['directories']['clips']
 LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
 VIDEOS_DIR = BASE_DIR / config['directories']['videos']
 AUDIO_DIR = BASE_DIR / config['directories']['audio']
+
+# Parametros
+num_topics = config['video_processing']['num_topics']
+num_keywords = config['video_processing']['num_keywords']
+min_duration = config['video_processing']['min_duration']
+max_duration = config['video_processing']['max_duration']
 
 def ensure_directories_exist():
     """Garante que as pastas necessárias existam antes de configurar o logging."""
@@ -60,8 +68,6 @@ sentiment_analyzer = pipeline("sentiment-analysis", model=config['sentiment_mode
 emotion_analyzer = pipeline("text-classification", model=config['emotion_model'])
 
 # Carrega o modelo de NER
-from transformers import BertForTokenClassification, BertTokenizer
-
 ner_model = BertForTokenClassification.from_pretrained(
     config['ner_model'],
     ignore_mismatched_sizes=True
@@ -122,6 +128,10 @@ def save_subtitles(segments, video_path, output_dir):
     subtitle_path = output_dir / subtitle_filename
 
     logging.info(f"Salvando a transcrição como legenda em: {subtitle_path}")
+    # Adicione a linha abaixo para ordenar os segmentos pelo score
+    segments.sort(key=lambda x: x['sentiment_score'], reverse=True)
+
+
     try:
         with open(subtitle_path, 'w') as f:
             for i, segment in enumerate(segments):
@@ -149,7 +159,7 @@ def analyze_sentiment(text: str):
     # logging.info(f"Análise de sentimento: Texto: '{text}' | Rótulo: {result['label']} | Score: {result['score']}")
     return result['label'], result['score']
 
-def extract_topics(segments, num_topics=5, num_keywords=10):
+def extract_topics(segments, num_topics=num_topics, num_keywords=num_keywords):
     text_data = [segment['text'] for segment in segments if segment['text'].strip()]
     num_documents = len(text_data)
 
@@ -174,7 +184,7 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
         logging.error(f"Erro ao ajustar o vectorizer: {str(e)}")
         return []
 
-def select_best_segments(segments: list, min_sentiment_score: float, min_duration: int = 60, max_duration: int = 90) -> list:
+def select_best_segments(segments: list, min_sentiment_score: float, min_duration: int = min_duration, max_duration: int = max_duration) -> list:
     """Seleciona todos os segmentos com base na análise de sentimentos e duração, sem limite de quantidade."""
     selected_segments = []
     sentiment_summary = {'positive': 0, 'negative': 0, 'neutral': 0}
@@ -267,14 +277,10 @@ def create_combined_segment(segments, start_time):
         'sentiment_score': segments[-1]['sentiment_score']
     }
 
-def generate_short_id():
-    """Gera um ID curto baseado em um timestamp."""    
-    return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]  # Retorna os primeiros 3 dígitos do milissegundos
-
 def save_clips(video_path, selected_segments):
     """Salva os clipes selecionados em uma nova pasta com um ID curto."""    
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    short_id = generate_short_id()  # Gera um ID curto
+    short_id = generate_unique_id()  # Gera um ID curto
     clip_subfolder = CLIPS_DIR / f"{video_name}_{short_id}"  # Nova pasta para os clipes
     clip_subfolder.mkdir(parents=True, exist_ok=True)
 
@@ -324,8 +330,11 @@ def process_video(video_path):
         )
 
         if selected_segments:
-            subtitle_path = save_subtitles(selected_segments, video_path, SUBTITLE_DIR)
             clips_saved = save_clips(video_path, selected_segments)
+
+            for path in clips_saved:
+                video_path = path.as_posix()
+                subtitle_path = save_subtitles(selected_segments, video_path, SUBTITLE_DIR)
 
             # Log resumido e final
             logging.info(f"Processamento concluído: {len(selected_segments)} segmentos escolhidos, {len(clips_saved)} clipes salvos.")
