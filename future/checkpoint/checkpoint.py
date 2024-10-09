@@ -3,30 +3,24 @@ import os
 import logging
 import re
 from datetime import datetime
+import cv2
+import numpy as np
 import moviepy.editor as mp
 import whisper
-from transformers import pipeline
+from transformers import pipeline, BertForTokenClassification, BertTokenizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 from pathlib import Path
 import json
 import warnings
 from transformers import logging as hf_logging
+import subprocess
+import shutil
+import pysrt
 
 # Supressão de avisos da biblioteca transformers
 hf_logging.set_verbosity_error()
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
-
-# Caminho base do projeto
-BASE_DIR = Path(__file__).resolve().parent
-
-# Diretórios
-SUBTITLE_DIR = BASE_DIR / "subtitles"
-CLIPS_DIR = BASE_DIR / "clips"
-LOGS_DIR = BASE_DIR / "logs"
-VIDEOS_DIR = BASE_DIR / "videos"
-AUDIO_DIR = BASE_DIR / "audio"  # Diretório para o áudio extraído
-
 
 def load_config():
     """Carrega as configurações do arquivo JSON."""
@@ -35,6 +29,30 @@ def load_config():
 
 # Carregar as configurações
 config = load_config()
+
+# Caminho base do projeto
+BASE_DIR = Path(__file__).resolve().parent
+
+# Diretórios
+SUBTITLE_DIR = BASE_DIR / config['directories']['subtitles']
+CLIPS_DIR = BASE_DIR / config['directories']['clips']
+LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
+VIDEOS_DIR = BASE_DIR / config['directories']['videos']
+AUDIO_DIR = BASE_DIR / config['directories']['audio']
+
+# Parametros
+num_topics = config['video_processing']['num_topics']
+num_keywords = config['video_processing']['num_keywords']
+min_duration = config['video_processing']['min_duration']
+max_duration = config['video_processing']['max_duration']
+max_words_per_segment = config['max_words_per_segment']
+font_file = config['font_file']
+
+# Carregar o modelo Whisper do config.json
+whisper_model = whisper.load_model(config['whisper_model'])
+
+# Carregar o score minimo no sentimento do config.json
+min_sent_score = config['video_processing']['min_sentiment_score']
 
 def ensure_directories_exist():
     """Garante que as pastas necessárias existam antes de configurar o logging."""
@@ -45,7 +63,7 @@ def ensure_directories_exist():
 ensure_directories_exist()
 
 # Configuração do logging
-log_filename = LOGS_DIR / "process.log"
+log_filename = LOGS_DIR / config['directories']['logs']['archive']
 logging.basicConfig(
     filename=log_filename,
     level=logging.INFO,
@@ -61,8 +79,6 @@ sentiment_analyzer = pipeline("sentiment-analysis", model=config['sentiment_mode
 emotion_analyzer = pipeline("text-classification", model=config['emotion_model'])
 
 # Carrega o modelo de NER
-from transformers import BertForTokenClassification, BertTokenizer
-
 ner_model = BertForTokenClassification.from_pretrained(
     config['ner_model'],
     ignore_mismatched_sizes=True
@@ -93,11 +109,11 @@ def extract_audio(video_path, audio_output_path):
         raise
 
 
-def transcribe_audio(audio_path, model):
+def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""    
     logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
     try:
-        result = model.transcribe(str(audio_path), verbose=True)
+        result = whisper_model.transcribe(audio_path, verbose=True)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
     except Exception as e:
@@ -105,42 +121,46 @@ def transcribe_audio(audio_path, model):
         raise
 
 def format_time(seconds):
-    """Formata o tempo em segundos para o formato SRT."""    
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    milliseconds = int((seconds - int(seconds)) * 1000)
-    return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02},{milliseconds:03}"
+    """Converte tempo em segundos para o formato SRT (HH:MM:SS,mmm)."""
+    millisec = int((seconds - int(seconds)) * 1000)
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02},{millisec:03}"
 
 def generate_unique_id():
     """Gera um ID único baseado no timestamp."""    
     return datetime.now().strftime("%Y%m%d%H%M%S")
+    
+def save_subtitles(segments, output_dir, unique_id, video_name):
+    """Salva os segmentos transcritos como arquivos SRT na pasta subtitles."""
+    subtitles_subfolder = output_dir / f"{video_name}_{unique_id}"
+    subtitles_subfolder.mkdir(parents=True, exist_ok=True)
 
-def save_subtitles(segments, video_path, output_dir):
-    """Salva os segmentos transcritos como um arquivo SRT na pasta subtitles."""
-    video_name = os.path.splitext(os.path.basename(video_path))[0]
-    unique_id = generate_unique_id()  # ID único para o vídeo
-    subtitle_filename = f"{video_name}_{unique_id}.srt"
-    subtitle_path = output_dir / subtitle_filename
+    logging.info(f"Salvando legendas em: {subtitles_subfolder}")
 
-    logging.info(f"Salvando a transcrição como legenda em: {subtitle_path}")
-    try:
-        with open(subtitle_path, 'w') as f:
-            for i, segment in enumerate(segments):
+    for i, segment in enumerate(segments):
+        subtitle_filename = f"{video_name}_{unique_id}_{i + 1}.srt"
+        subtitle_path = subtitles_subfolder / subtitle_filename
+
+        logging.info(f"Salvando a transcrição como legenda em: {subtitle_path}")
+
+        try:
+            with open(subtitle_path, 'w', encoding='utf-8') as f:
                 start_time = format_time(segment['start'])
                 end_time = format_time(segment['end'])
                 text = segment['text']
-                segment_id = f"{video_name}_{unique_id}_{i + 1}"  # ID único para o segmento
 
-                f.write(f"{segment_id}\n")  # Escreve o ID do segmento
-                f.write(f"{start_time} --> {end_time}\n")
-                f.write(f"{text.strip()}\n\n")
+                f.write(f"1\n")  # ID do segmento
+                f.write(f"{start_time} --> {end_time}\n") 
+                f.write(f"{text.strip()}\n")  # Texto
 
-        logging.info(f"Legenda salva com sucesso em: {subtitle_path}")
-        return subtitle_path
-    except Exception as e:
-        logging.error(f"Erro ao salvar a legenda: {e}")
-        raise
+            logging.info(f"Legenda salva com sucesso em: {subtitle_path}")
+        except Exception as e:
+            logging.error(f"Erro ao salvar a legenda: {e}")
+            raise
 
+    return subtitles_subfolder 
 
 def analyze_sentiment(text: str):
     """Analisa o sentimento de um texto e retorna o rótulo e o score."""    
@@ -148,8 +168,7 @@ def analyze_sentiment(text: str):
     # logging.info(f"Análise de sentimento: Texto: '{text}' | Rótulo: {result['label']} | Score: {result['score']}")
     return result['label'], result['score']
 
-
-def extract_topics(segments, num_topics=5, num_keywords=10):
+def extract_topics(segments, num_topics=num_topics, num_keywords=num_keywords):
     text_data = [segment['text'] for segment in segments if segment['text'].strip()]
     num_documents = len(text_data)
 
@@ -174,16 +193,14 @@ def extract_topics(segments, num_topics=5, num_keywords=10):
         logging.error(f"Erro ao ajustar o vectorizer: {str(e)}")
         return []
 
-def select_best_segments(segments: list, min_sentiment_score: float, min_duration: int = 60, max_duration: int = 90) -> list:
+def select_best_segments(segments: list, min_sentiment_score: float, min_duration: int = min_duration, max_duration: int = max_duration) -> list:
     """Seleciona todos os segmentos com base na análise de sentimentos e duração, sem limite de quantidade."""
     selected_segments = []
     sentiment_summary = {'positive': 0, 'negative': 0, 'neutral': 0}
 
     # Extrair tópicos para todos os segmentos
     topics = extract_topics(segments)
-    
     segment_motives = []
-
     for segment in segments:
         text = clean_text(segment['text'])
         label, score = analyze_sentiment(text)
@@ -267,15 +284,134 @@ def create_combined_segment(segments, start_time):
         'sentiment_score': segments[-1]['sentiment_score']
     }
 
-def generate_short_id():
-    """Gera um ID curto baseado em um timestamp."""    
-    return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]  # Retorna os primeiros 3 dígitos do milissegundos
+def add_subtitle(clip_path, srt_filename, font_size=20, 
+                 font_color="16777215", border_color="0", border_width=4,
+                 alignment=2, width=1080, 
+                 height=1920, x=None, y=None):
 
-def save_clips(video_path, selected_segments):
-    """Salva os clipes selecionados em uma nova pasta com um ID curto."""    
-    video_name = os.path.splitext(os.path.basename(video_path))[0]
-    short_id = generate_short_id()  # Gera um ID curto
-    clip_subfolder = CLIPS_DIR / f"{video_name}_{short_id}"  # Nova pasta para os clipes
+    srt_temp_file = None  # Inicializa como None para garantir que exista
+    try:
+        # Verificar se os parâmetros não são None
+        if not clip_path or not srt_filename or not font_file:
+            raise ValueError("Parâmetros inválidos. clip_path, srt_filename e font_file não podem ser None.")
+        
+        # Verificar se o arquivo SRT e o vídeo existem
+        if not os.path.exists(srt_filename):
+            raise FileNotFoundError(f"Arquivo SRT não encontrado: {srt_filename}")
+        
+        if not os.path.exists(clip_path):
+            raise FileNotFoundError(f"Arquivo de vídeo não encontrado: {clip_path}")
+        
+        subs = pysrt.open(srt_filename)
+        srt_temp_file = 'temp_subtitles.srt'
+        with open(srt_temp_file, 'w', encoding='utf-8') as f:
+            for sub in subs:
+                f.write(f"{sub.index}\n")
+                start_time = f"{sub.start.hours:02}:{sub.start.minutes:02}:{sub.start.seconds:02},{sub.start.milliseconds:03}"
+                end_time = f"{sub.end.hours:02}:{sub.end.minutes:02}:{sub.end.seconds:02},{sub.end.milliseconds:03}"
+                f.write(f"{start_time} --> {end_time}\n")
+                f.write(f"{sub.text}\n\n")
+    
+        # Atualizar o comando FFmpeg para apenas adicionar as legendas sem crop
+        command = [
+            'ffmpeg',
+            '-y', 
+            '-i', clip_path,
+            '-vf', (f"subtitles={srt_temp_file}:force_style='FontName={font_file},"
+                    f"FontSize={font_size},"
+                    f"PrimaryColour={font_color},"
+                    f"BorderStyle=1,"
+                    f"Outline={border_width},"
+                    f"OutlineColour={border_color},"
+                    f"Alignment={alignment}'"
+                ),
+            '-codec:a', 'copy', 
+            'temp_subtitled.mp4'
+        ]
+        
+        subprocess.run(command, check=True)
+        logging.info(f"Legenda adicionada com sucesso no vídeo '{clip_path}'. Arquivo de saída temporário: 'temp_subtitled.mp4'")
+        
+        shutil.move('temp_subtitled.mp4', clip_path)
+        logging.info(f"O arquivo temporário foi movido para substituir o original: {clip_path}")
+        
+    except ValueError as e:
+        logging.error(f"Erro de valor: {e}")
+    except FileNotFoundError as e:
+        logging.error(e)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Erro ao adicionar legenda: {e}")
+    except Exception as e:
+        logging.error(f"Ocorreu um erro: {e}")
+    finally:
+        if srt_temp_file and os.path.exists(srt_temp_file):
+            os.remove(srt_temp_file)
+            logging.info(f"Arquivo temporário {srt_temp_file} removido com sucesso.")
+
+def adjust_focus(clip):
+    """
+    Ajusta o foco do clipe para a pessoa que está falando ou para a cena importante,
+    mantendo as dimensões fixas de 1080x1920.
+    """
+    # Converter o primeiro frame para OpenCV
+    frame = clip.get_frame(0)
+    frame_cv = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    
+    # Carregar o classificador de faces pré-treinado do OpenCV
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    
+    # Detectar faces no frame
+    gray = cv2.cvtColor(frame_cv, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    
+    if len(faces) > 0:
+        # Supondo que a primeira face detectada é a principal
+        (x, y, w, h) = faces[0]
+        center_x = x + w // 2
+        center_y = y + h // 2
+    else:
+        # Se nenhuma face for detectada, manter o foco central
+        center_x = frame.shape[1] // 2
+        center_y = frame.shape[0] // 2
+    
+    # Definir as dimensões do crop para 1080x1920
+    crop_width = 1080
+    crop_height = 1920
+    
+    # Calcular os limites do crop
+    x1 = center_x - crop_width // 2
+    y1 = center_y - crop_height // 2
+    x2 = x1 + crop_width
+    y2 = y1 + crop_height
+    
+    # Ajustar x1 e y1 se o crop exceder os limites do frame
+    if x1 < 0:
+        x1 = 0
+        x2 = crop_width
+    if y1 < 0:
+        y1 = 0
+        y2 = crop_height
+    if x2 > frame.shape[1]:
+        x2 = frame.shape[1]
+        x1 = x2 - crop_width
+    if y2 > frame.shape[0]:
+        y2 = frame.shape[0]
+        y1 = y2 - crop_height
+    
+    # Garantir que as coordenadas do crop estejam dentro dos limites do frame
+    x1 = max(x1, 0)
+    y1 = max(y1, 0)
+    x2 = min(x2, frame.shape[1])
+    y2 = min(y2, frame.shape[0])
+    
+    # Aplicar o crop ao clipe
+    focused_clip = clip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+    
+    return focused_clip
+
+def save_clips(video_path, selected_segments, unique_id, video_name):
+    """Salva os clipes selecionados em uma nova pasta, usando SRTs para nomeação e referência."""
+    clip_subfolder = CLIPS_DIR / f"{video_name}_{unique_id}" 
     clip_subfolder.mkdir(parents=True, exist_ok=True)
 
     clips_saved = []
@@ -283,14 +419,27 @@ def save_clips(video_path, selected_segments):
     for i, segment in enumerate(selected_segments):
         start_time = segment['start']
         end_time = segment['end']
-        clip_filename = f"{video_name}_clip_{i + 1}.mp4"  # Nome do clipe
+        srt_filename = SUBTITLE_DIR / f"{video_name}_{unique_id}/{video_name}_{unique_id}_{i + 1}.srt"  # caminho SRT
+        clip_filename = f"{video_name}_{unique_id}_{i + 1}.mp4"  # Nome do clipe
         clip_path = clip_subfolder / clip_filename
 
         try:
             video = mp.VideoFileClip(str(video_path))
             clip = video.subclip(start_time, end_time)
-            clip.write_videofile(str(clip_path), codec="libx264")
+            
+            # Ajustar o foco no clipe
+            focused_clip = adjust_focus(clip)
+            
+            # Adicionar transições suaves (opcional, mas recomendado)
+            focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
+            
+            # Salvar o clipe com foco ajustado e transições
+            focused_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
             clips_saved.append(clip_path)
+            
+            # Gerar e adicionar legendas
+            srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
+            add_subtitle(str(clip_path), srt_filename)
             logging.info(f"Clip salvo: {clip_path}")
 
         except Exception as e:
@@ -308,35 +457,88 @@ def clean_up_audio_files():
         except Exception as e:
             logging.error(f"Erro ao remover o arquivo de áudio {audio_file}: {e}")
 
+def split_transcript_into_segments(segments):
+    """Divide a transcrição em segmentos respeitando o tempo."""
+    divided_segments = []
+    
+    for segment in segments:
+        text = segment["text"].strip()
+        words = text.split()
+        start_time = segment["start"]
+        end_time = segment["end"]
+        for i in range(0, len(words), max_words_per_segment):
+            chunk_words = words[i:i + max_words_per_segment]
+            chunk_text = ' '.join(chunk_words)
+            
+            chunk_start = start_time + (i / len(words)) * (end_time - start_time)
+            chunk_end = start_time + ((i + len(chunk_words)) / len(words)) * (end_time - start_time)
+            
+            divided_segments.append({
+                "start": chunk_start,
+                "end": chunk_end,
+                "text": chunk_text
+            })
+    
+    return divided_segments
+
+# Geração do arquivo SRT
+def generate_srt(segments, srt_output_path):
+    """Gera um arquivo SRT a partir de uma lista de segmentos."""
+    subs = pysrt.SubRipFile()
+    
+    for i, segment in enumerate(segments):
+        start_time = pysrt.SubRipTime(seconds=segment['start'])
+        end_time = pysrt.SubRipTime(seconds=segment['end'])
+        text = segment['text']
+        
+        sub = pysrt.SubRipItem(index=i + 1, start=start_time, end=end_time, text=text)
+        subs.append(sub)
+    
+    # Salva o arquivo SRT
+    subs.save(srt_output_path, encoding='utf-8')
+    logging.info(f"Arquivo SRT salvo em: {srt_output_path}")
+    return srt_output_path
+
+def generate_srt_from_video(video_path, srt_output_path):
+    """Gera um arquivo SRT a partir de um vídeo."""
+    if video_path is not None:
+        audio_output_path = video_path.replace('.mp4', '.mp3')
+    else:
+        logging.error("O caminho do vídeo é None.")
+    audio_output_path = video_path.replace('.mp4', '.mp3')
+    extract_audio(video_path, audio_output_path)
+    transcript_segments = transcribe_audio(audio_output_path)
+    segments = split_transcript_into_segments(transcript_segments)
+    srt_output_path = generate_srt(segments, srt_output_path)
+
+    if os.path.exists(audio_output_path):
+        os.remove(audio_output_path)
+
+    return srt_output_path
+
 def process_video(video_path):
-    """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""
+    """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""  
     audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}.mp3"
+    unique_id = generate_unique_id()  # Gera um ID único
+    video_name = os.path.splitext(os.path.basename(video_path))[0]
+
     try:
         extract_audio(video_path, audio_output_path)
-
-        # Carregar o modelo Whisper do config.json
-        whisper_model = whisper.load_model(config['whisper_model'])
-        segments = transcribe_audio(audio_output_path, whisper_model)
-
-        selected_segments = select_best_segments(
-            segments, 
-            config['video_processing']['min_sentiment_score'], 
-        )
+        segments = transcribe_audio(str(audio_output_path))
+        selected_segments = select_best_segments(segments, min_sent_score)
 
         if selected_segments:
-            subtitle_path = save_subtitles(selected_segments, video_path, SUBTITLE_DIR)
-            clips_saved = save_clips(video_path, selected_segments)
-
+            save_subtitles(selected_segments, SUBTITLE_DIR, unique_id, video_name)
+            clips_saved = save_clips(video_path, selected_segments, unique_id, video_name)
+            
             # Log resumido e final
             logging.info(f"Processamento concluído: {len(selected_segments)} segmentos escolhidos, {len(clips_saved)} clipes salvos.")
     
     except Exception as e:
         logging.error(f"Erro no processamento do vídeo: {e}")
     finally:
-        # Limpar os arquivos de áudio mesmo em caso de erro
         clean_up_audio_files()
 
-# Chamando a função process_video com o caminho do vídeo
 if __name__ == "__main__":
     video_file_path = sys.argv[1]
     process_video(video_file_path)
