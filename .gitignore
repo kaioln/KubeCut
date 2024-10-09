@@ -99,3 +99,4 @@ terraform.tfstate
 *.mp3
 *.log
 *.srt
+*.wav
