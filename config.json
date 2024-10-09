@@ -16,7 +16,7 @@
     "videos": "videos",
     "audio": "audio"
   },
-  "font_file": "Arial",
+  "font_file": "ariali.ttf",
   "max_words_per_segment": 6,
   "whisper_model": "tiny",
   "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",

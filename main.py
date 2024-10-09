@@ -3,6 +3,8 @@ import os
 import logging
 import re
 from datetime import datetime
+import cv2
+import numpy as np
 import moviepy.editor as mp
 import whisper
 from transformers import pipeline, BertForTokenClassification, BertTokenizer
@@ -284,15 +286,14 @@ def create_combined_segment(segments, start_time):
 
 def add_subtitle(clip_path, srt_filename, font_size=20, 
                  font_color="16777215", border_color="0", border_width=4,
-                 alignment=2, width=480, 
-                          height=720, x=400, y=0):  # Ajuste aqui
+                 alignment=2, width=1080, 
+                 height=1920, x=None, y=None):
+
     srt_temp_file = None  # Inicializa como None para garantir que exista
     try:
         # Verificar se os parâmetros não são None
-        if not font_file:
-            logging.error("Parâmetros inválidos. font_file não podem ser None.")
-            logging.warning("Alterando fonte padrão para Arial.")
-            font_file = 'Arial'
+        if not clip_path or not srt_filename or not font_file:
+            raise ValueError("Parâmetros inválidos. clip_path, srt_filename e font_file não podem ser None.")
         
         # Verificar se o arquivo SRT e o vídeo existem
         if not os.path.exists(srt_filename):
@@ -310,21 +311,13 @@ def add_subtitle(clip_path, srt_filename, font_size=20,
                 end_time = f"{sub.end.hours:02}:{sub.end.minutes:02}:{sub.end.seconds:02},{sub.end.milliseconds:03}"
                 f.write(f"{start_time} --> {end_time}\n")
                 f.write(f"{sub.text}\n\n")
-
-        if clip_path is not None:
-            temp_output_path = clip_path.replace('.mp4', '_temp.mp4')
-        else:
-            logging.error("O caminho do clipe é None.")
-        temp_output_path = clip_path.replace('.mp4', '_temp.mp4')
-        
+    
+        # Atualizar o comando FFmpeg para apenas adicionar as legendas sem crop
         command = [
             'ffmpeg',
-            # '-report', # log desse treco
             '-y', 
             '-i', clip_path,
-            '-vf', (f"crop={width}:{height}:{x}:{y},"
-                    f"subtitles={srt_temp_file}:"
-                    f"force_style='FontName={font_file},"
+            '-vf', (f"subtitles={srt_temp_file}:force_style='FontName={font_file},"
                     f"FontSize={font_size},"
                     f"PrimaryColour={font_color},"
                     f"BorderStyle=1,"
@@ -333,13 +326,13 @@ def add_subtitle(clip_path, srt_filename, font_size=20,
                     f"Alignment={alignment}'"
                 ),
             '-codec:a', 'copy', 
-            temp_output_path  
+            'temp_subtitled.mp4'
         ]
         
         subprocess.run(command, check=True)
-        logging.info(f"Legenda adicionada com sucesso no vídeo '{clip_path}'. Arquivo de saída temporário: '{temp_output_path}'")
+        logging.info(f"Legenda adicionada com sucesso no vídeo '{clip_path}'. Arquivo de saída temporário: 'temp_subtitled.mp4'")
         
-        shutil.move(temp_output_path, clip_path)
+        shutil.move('temp_subtitled.mp4', clip_path)
         logging.info(f"O arquivo temporário foi movido para substituir o original: {clip_path}")
         
     except ValueError as e:
@@ -355,6 +348,67 @@ def add_subtitle(clip_path, srt_filename, font_size=20,
             os.remove(srt_temp_file)
             logging.info(f"Arquivo temporário {srt_temp_file} removido com sucesso.")
 
+def adjust_focus(clip):
+    """
+    Ajusta o foco do clipe para a pessoa que está falando ou para a cena importante,
+    mantendo as dimensões fixas de 1080x1920.
+    """
+    # Converter o primeiro frame para OpenCV
+    frame = clip.get_frame(0)
+    frame_cv = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    
+    # Carregar o classificador de faces pré-treinado do OpenCV
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    
+    # Detectar faces no frame
+    gray = cv2.cvtColor(frame_cv, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    
+    if len(faces) > 0:
+        # Supondo que a primeira face detectada é a principal
+        (x, y, w, h) = faces[0]
+        center_x = x + w // 2
+        center_y = y + h // 2
+    else:
+        # Se nenhuma face for detectada, manter o foco central
+        center_x = frame.shape[1] // 2
+        center_y = frame.shape[0] // 2
+    
+    # Definir as dimensões do crop para 1080x1920
+    crop_width = 1080
+    crop_height = 1920
+    
+    # Calcular os limites do crop
+    x1 = center_x - crop_width // 2
+    y1 = center_y - crop_height // 2
+    x2 = x1 + crop_width
+    y2 = y1 + crop_height
+    
+    # Ajustar x1 e y1 se o crop exceder os limites do frame
+    if x1 < 0:
+        x1 = 0
+        x2 = crop_width
+    if y1 < 0:
+        y1 = 0
+        y2 = crop_height
+    if x2 > frame.shape[1]:
+        x2 = frame.shape[1]
+        x1 = x2 - crop_width
+    if y2 > frame.shape[0]:
+        y2 = frame.shape[0]
+        y1 = y2 - crop_height
+    
+    # Garantir que as coordenadas do crop estejam dentro dos limites do frame
+    x1 = max(x1, 0)
+    y1 = max(y1, 0)
+    x2 = min(x2, frame.shape[1])
+    y2 = min(y2, frame.shape[0])
+    
+    # Aplicar o crop ao clipe
+    focused_clip = clip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+    
+    return focused_clip
+
 def save_clips(video_path, selected_segments, unique_id, video_name):
     """Salva os clipes selecionados em uma nova pasta, usando SRTs para nomeação e referência."""
     clip_subfolder = CLIPS_DIR / f"{video_name}_{unique_id}" 
@@ -365,15 +419,25 @@ def save_clips(video_path, selected_segments, unique_id, video_name):
     for i, segment in enumerate(selected_segments):
         start_time = segment['start']
         end_time = segment['end']
-        srt_filename = SUBTITLE_DIR / f"{video_name}_{unique_id}/{video_name}_{unique_id}_{i + 1}.srt"  # acho que n vai usar, guardar pq mudei pro processar_video
+        srt_filename = SUBTITLE_DIR / f"{video_name}_{unique_id}/{video_name}_{unique_id}_{i + 1}.srt"  # caminho SRT
         clip_filename = f"{video_name}_{unique_id}_{i + 1}.mp4"  # Nome do clipe
         clip_path = clip_subfolder / clip_filename
 
         try:
             video = mp.VideoFileClip(str(video_path))
             clip = video.subclip(start_time, end_time)
-            clip.write_videofile(str(clip_path), codec="libx264")
+            
+            # Ajustar o foco no clipe
+            focused_clip = adjust_focus(clip)
+            
+            # Adicionar transições suaves (opcional, mas recomendado)
+            focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
+            
+            # Salvar o clipe com foco ajustado e transições
+            focused_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
             clips_saved.append(clip_path)
+            
+            # Gerar e adicionar legendas
             srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
             add_subtitle(str(clip_path), srt_filename)
             logging.info(f"Clip salvo: {clip_path}")
