@@ -1,10 +1,10 @@
 {
   "video_processing": {
-    "min_sentiment_score": 0.8,
+    "min_sentiment_score": 0.95,
     "num_topics": 5,
-    "num_keywords": 10,
-    "min_duration": 20,
-    "max_duration": 30
+    "num_keywords": 15,
+    "min_duration": 60,
+    "max_duration": 90
   },
   "directories": {
     "subtitles": "subtitles",
@@ -17,7 +17,7 @@
     "audio": "audio"
   },
   "font_file": "ariali.ttf",
-  "max_words_per_segment": 6,
+  "max_words_per_segment": 25,
   "whisper_model": "tiny",
   "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",
   "emotion_model": "j-hartmann/emotion-english-distilroberta-base",

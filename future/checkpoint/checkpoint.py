@@ -284,8 +284,8 @@ def create_combined_segment(segments, start_time):
         'sentiment_score': segments[-1]['sentiment_score']
     }
 
-def add_subtitle(clip_path, srt_filename, font_size=20, 
-                 font_color="16777215", border_color="0", border_width=4,
+def add_subtitle(clip_path, srt_filename, font_size=25, 
+                 font_color="16777215", border_color="0", border_width=12,
                  alignment=2, width=1080, 
                  height=1920, x=None, y=None):
 
@@ -349,10 +349,6 @@ def add_subtitle(clip_path, srt_filename, font_size=20,
             logging.info(f"Arquivo temporário {srt_temp_file} removido com sucesso.")
 
 def adjust_focus(clip):
-    """
-    Ajusta o foco do clipe para a pessoa que está falando ou para a cena importante,
-    mantendo as dimensões fixas de 1080x1920.
-    """
     # Converter o primeiro frame para OpenCV
     frame = clip.get_frame(0)
     frame_cv = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
@@ -430,17 +426,53 @@ def save_clips(video_path, selected_segments, unique_id, video_name):
             # Ajustar o foco no clipe
             focused_clip = adjust_focus(clip)
             
-            # Adicionar transições suaves (opcional, mas recomendado)
+            # Adicionar transições suaves
             focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
             
             # Salvar o clipe com foco ajustado e transições
             focused_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
-            clips_saved.append(clip_path)
-            
+
             # Gerar e adicionar legendas
             srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
             add_subtitle(str(clip_path), srt_filename)
             logging.info(f"Clip salvo: {clip_path}")
+
+            # Aplicar remoção de metadados e camuflagem
+            # Caminho temporário para o vídeo camuflado
+            camouflaged_video_path = str(clip_path).replace(".mp4", "_temp.mp4")
+
+            # Comando FFmpeg para remoção de metadados e aplicação de camuflagem
+            ffmpeg_command = [
+                'ffmpeg',
+                '-i', str(clip_path),
+                
+                # Ajustar tempo do vídeo e aplicar efeitos de contraste e saturação
+                '-vf', 'setpts=PTS/1.05,eq=contrast=1.2:saturation=1.1',
+                
+                # Ajustar tempo do áudio sem mudar a taxa de amostragem
+                '-af', 'atempo=1.05',
+                
+                '-c:v', 'libx264',  # Codec de vídeo
+                '-c:a', 'aac',      # Codec de áudio
+                
+                # Melhoria no carregamento e configuração de metadados
+                '-movflags', '+faststart',  
+                '-metadata', 'comment=Video processed for copyright camouflage',
+                
+                '-y',  # Sobrescrever sem perguntar
+                camouflaged_video_path  # Caminho para o vídeo camuflado temporário
+            ]
+
+
+            # Executar o comando FFmpeg
+            subprocess.run(ffmpeg_command, check=True)
+            logging.info(f"Metadados removidos e vídeo camuflado salvo em: {camouflaged_video_path}")
+
+            # Substituir o arquivo original pelo vídeo camuflado
+            subprocess.run(['mv', camouflaged_video_path, str(clip_path)])
+            logging.info(f"Vídeo camuflado salvo como: {clip_path}")
+
+            clips_saved.append(clip_path)  # O caminho do clipe salvo
 
         except Exception as e:
             logging.error(f"Erro ao salvar o clipe {clip_filename}: {e}")
