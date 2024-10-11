@@ -17,6 +17,8 @@ from transformers import logging as hf_logging
 import subprocess
 import shutil
 import pysrt
+from googleapiclient.discovery import build
+from yt_dlp import YoutubeDL
 
 # Supressão de avisos da biblioteca transformers
 hf_logging.set_verbosity_error()
@@ -40,7 +42,7 @@ LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
 VIDEOS_DIR = BASE_DIR / config['directories']['videos']
 AUDIO_DIR = BASE_DIR / config['directories']['audio']
 
-# Parametros
+# Parâmetros
 num_topics = config['video_processing']['num_topics']
 num_keywords = config['video_processing']['num_keywords']
 min_duration = config['video_processing']['min_duration']
@@ -51,7 +53,7 @@ font_file = config['font_file']
 # Carregar o modelo Whisper do config.json
 whisper_model = whisper.load_model(config['whisper_model'])
 
-# Carregar o score minimo no sentimento do config.json
+# Carregar o score mínimo no sentimento do config.json
 min_sent_score = config['video_processing']['min_sentiment_score']
 
 def ensure_directories_exist():
@@ -89,6 +91,94 @@ ner_tokenizer = BertTokenizer.from_pretrained(config['ner_model'])
 
 # Inicializa o pipeline de NER
 ner_analyzer = pipeline("ner", model=ner_model, tokenizer=ner_tokenizer, aggregation_strategy="simple")
+
+# Chave da API do YouTube
+YOUTUBE_API_KEY = 'AIzaSyAcYrb9k3rHmYdvQcR1EO8MpBYPmHAYt7M'  # Substitua pela sua nova chave de API
+
+def sanitize_filename(filename):
+    """Remove caracteres inválidos do título do vídeo para salvar corretamente no sistema de arquivos."""
+    return re.sub(r'[\\/*?:"<>|]', "", filename)
+
+def get_latest_video_from_channel(channel_id):
+    """Retorna o último vídeo de um canal usando a API do YouTube, ignorando lives ao vivo."""
+    try:
+        logging.info("Inicializando a API do YouTube.")
+        youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
+
+        # Pega os vídeos do canal
+        logging.info(f"Buscando vídeos do canal ID: {channel_id}")
+        request = youtube.search().list(
+            part='snippet',
+            channelId=channel_id,
+            order='date',
+            maxResults=5  # Buscar mais vídeos para evitar lives
+        )
+        response = request.execute()
+
+        if response['items']:
+            logging.info(f"Número de vídeos encontrados: {len(response['items'])}")
+            for video in response['items']:
+                live_content = video['snippet'].get('liveBroadcastContent')
+                logging.info(f"Verificando se o vídeo é uma live: {video['snippet']['title']} ({live_content})")
+                if live_content == 'live':
+                    logging.info(f"Ignorando live ao vivo: {video['snippet']['title']}")
+                    continue
+
+                video_id = video['id'].get('videoId')
+                if not video_id:
+                    logging.warning(f"Vídeo sem ID válido encontrado: {video['snippet']['title']}")
+                    continue
+
+                video_title = video['snippet']['title']
+                video_url = f'https://www.youtube.com/watch?v={video_id}'
+                logging.info(f"Último vídeo válido encontrado: {video_title} ({video_url})")
+                return video_url, video_title
+
+            logging.error("Nenhum vídeo válido encontrado (somente lives ou vídeos sem ID).")
+            return None, None
+        else:
+            logging.error("Nenhum vídeo encontrado no canal.")
+            return None, None
+
+    except Exception as e:
+        logging.error(f"Erro ao acessar a API do YouTube: {str(e)}", exc_info=True)
+        return None, None
+
+def download_video(video_url, video_title):
+    """Faz o download de um vídeo do YouTube usando yt-dlp e salva no diretório especificado."""
+    try:
+        logging.info(f"Iniciando download do vídeo: {video_title}")
+
+        # Diretório onde o vídeo será salvo
+        video_dir = Path('/mnt/c/Users/TI/Project/videos')
+        video_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sanitizar o título do vídeo para criar um nome de arquivo válido
+        sanitized_title = sanitize_filename(video_title)
+        video_path = video_dir / f"{sanitized_title}.mp4"
+
+        # Verifica se o vídeo já foi baixado
+        if video_path.exists():
+            logging.info(f"Vídeo já foi baixado anteriormente: {video_path}")
+            return video_path
+
+        # Opções para o yt-dlp
+        ydl_opts = {
+            'format': 'best',  # Baixar na melhor qualidade disponível
+            'outtmpl': str(video_path),  # Define o caminho e o nome do arquivo
+            'noplaylist': True,  # Não baixar playlists
+        }
+
+        # Faz o download do vídeo usando yt-dlp
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([video_url])
+
+        logging.info(f"Vídeo baixado com sucesso em: {video_path}")
+        return video_path
+
+    except Exception as e:
+        logging.error(f"Erro ao baixar o vídeo: {str(e)}", exc_info=True)
+        return None
 
 def clean_text(text):
     """Remove caracteres especiais e limpa o texto.""" 
@@ -548,6 +638,7 @@ def generate_srt_from_video(video_path, srt_output_path):
 
     return srt_output_path
 
+
 def process_video(video_path):
     """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""  
     audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}.mp3"
@@ -572,5 +663,11 @@ def process_video(video_path):
         clean_up_audio_files()
 
 if __name__ == "__main__":
-    video_file_path = sys.argv[1]
-    process_video(video_file_path)
+    # Substitua 'seu_channel_id' pelo ID do canal desejado
+    channel_id = 'UC69JW8XvnPjXZfysWQqOk4Q'  
+    video_url, video_title = get_latest_video_from_channel(channel_id)
+
+    if video_url:
+        video_path = download_video(video_url, video_title)
+        if video_path:
+            process_video(video_path)

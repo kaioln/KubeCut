@@ -17,6 +17,7 @@ from transformers import logging as hf_logging
 import subprocess
 import shutil
 import pysrt
+import yt_dlp
 
 # Supressão de avisos da biblioteca transformers
 hf_logging.set_verbosity_error()
@@ -40,7 +41,7 @@ LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
 VIDEOS_DIR = BASE_DIR / config['directories']['videos']
 AUDIO_DIR = BASE_DIR / config['directories']['audio']
 
-# Parametros
+# Parâmetros
 num_topics = config['video_processing']['num_topics']
 num_keywords = config['video_processing']['num_keywords']
 min_duration = config['video_processing']['min_duration']
@@ -51,7 +52,7 @@ font_file = config['font_file']
 # Carregar o modelo Whisper do config.json
 whisper_model = whisper.load_model(config['whisper_model'])
 
-# Carregar o score minimo no sentimento do config.json
+# Carregar o score mínimo no sentimento do config.json
 min_sent_score = config['video_processing']['min_sentiment_score']
 
 def ensure_directories_exist():
@@ -69,6 +70,32 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+def download_latest_video(channel_url):
+    """Baixa o último vídeo postado de um canal do YouTube."""
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': str(VIDEOS_DIR / '%(title)s.%(ext)s'),  # Salvar na pasta VIDEOS_DIR
+        'noplaylist': True,  # Apenas baixar o último vídeo
+        'quiet': False,
+        'postprocessors': [{
+            'key': 'FFmpegVideoConvertor',
+            'ext': 'mp4',  # Converter para formato mp4
+        }],
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Obter informações do canal e baixar o último vídeo
+            logging.info(f"Baixando o último vídeo do canal: {channel_url}")
+            ydl.download([channel_url])
+            logging.info("Download do vídeo concluído com sucesso.")
+    except Exception as e:
+        logging.error(f"Erro ao baixar o vídeo: {e}")
+
+# Chamar a função para baixar o último vídeo do canal
+channel_url = config['youtube']['channel_url']  # URL do canal do YouTube no config.json
+download_latest_video(channel_url)
 
 # Inicializa os pipelines com base nas configurações
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -548,29 +575,45 @@ def generate_srt_from_video(video_path, srt_output_path):
 
     return srt_output_path
 
-def process_video(video_path):
-    """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""  
+def process_video():
+    """Processa o vídeo completo, baixando o último vídeo do YouTube, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""
+    
+    # Baixar o último vídeo do YouTube
+    video_path = download_latest_video_from_youtube()
+
+    if not video_path:
+        logging.error("Não foi possível baixar o vídeo mais recente do YouTube.")
+        return
+
     audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}.mp3"
     unique_id = generate_unique_id()  # Gera um ID único
     video_name = os.path.splitext(os.path.basename(video_path))[0]
 
     try:
+        # Extrair áudio do vídeo
         extract_audio(video_path, audio_output_path)
+
+        # Transcrever áudio
         segments = transcribe_audio(str(audio_output_path))
-        selected_segments = select_best_segments(segments, min_sent_score)
+
+        # Selecionar os melhores segmentos usando OpenCV
+        selected_segments = select_best_scenes(video_path)
 
         if selected_segments:
             save_subtitles(selected_segments, SUBTITLE_DIR, unique_id, video_name)
             clips_saved = save_clips(video_path, selected_segments, unique_id, video_name)
-            
+
             # Log resumido e final
             logging.info(f"Processamento concluído: {len(selected_segments)} segmentos escolhidos, {len(clips_saved)} clipes salvos.")
-    
+
+        else:
+            logging.info("Nenhum segmento selecionado para salvamento.")
+
     except Exception as e:
         logging.error(f"Erro no processamento do vídeo: {e}")
+
     finally:
         clean_up_audio_files()
 
 if __name__ == "__main__":
-    video_file_path = sys.argv[1]
-    process_video(video_file_path)
+    process_video()
