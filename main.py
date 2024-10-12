@@ -430,17 +430,53 @@ def save_clips(video_path, selected_segments, unique_id, video_name):
             # Ajustar o foco no clipe
             focused_clip = adjust_focus(clip)
             
-            # Adicionar transições suaves (opcional, mas recomendado)
+            # Adicionar transições suaves
             focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
             
             # Salvar o clipe com foco ajustado e transições
             focused_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
-            clips_saved.append(clip_path)
-            
+
             # Gerar e adicionar legendas
             srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
             add_subtitle(str(clip_path), srt_filename)
             logging.info(f"Clip salvo: {clip_path}")
+
+            # Aplicar remoção de metadados e camuflagem
+            # Caminho temporário para o vídeo camuflado
+            camouflaged_video_path = str(clip_path).replace(".mp4", "_temp.mp4")
+
+            # Comando FFmpeg para remoção de metadados e aplicação de camuflagem
+            ffmpeg_command = [
+                'ffmpeg',
+                '-i', str(clip_path),
+                
+                # Ajustar tempo do vídeo e aplicar efeitos de contraste e saturação
+                '-vf', 'setpts=PTS/1.05,eq=contrast=1.2:saturation=1.1',
+                
+                # Ajustar tempo do áudio sem mudar a taxa de amostragem
+                '-af', 'atempo=1.05',
+                
+                '-c:v', 'libx264',  # Codec de vídeo
+                '-c:a', 'aac',      # Codec de áudio
+                
+                # Melhoria no carregamento e configuração de metadados
+                '-movflags', '+faststart',  
+                '-metadata', 'comment=Video processed for copyright camouflage',
+                
+                '-y',  # Sobrescrever sem perguntar
+                camouflaged_video_path  # Caminho para o vídeo camuflado temporário
+            ]
+
+
+            # Executar o comando FFmpeg
+            subprocess.run(ffmpeg_command, check=True)
+            logging.info(f"Metadados removidos e vídeo camuflado salvo em: {camouflaged_video_path}")
+
+            # Substituir o arquivo original pelo vídeo camuflado
+            subprocess.run(['mv', camouflaged_video_path, str(clip_path)])
+            logging.info(f"Vídeo camuflado salvo como: {clip_path}")
+
+            clips_saved.append(clip_path)  # O caminho do clipe salvo
 
         except Exception as e:
             logging.error(f"Erro ao salvar o clipe {clip_filename}: {e}")
