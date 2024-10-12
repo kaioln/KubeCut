@@ -6,27 +6,28 @@ from yt_dlp import YoutubeDL
 from pathlib import Path
 
 # Configuração do logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+log_filename = "logs/process.log"
+file_handler = logging.FileHandler(log_filename, encoding='utf-8')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logging.basicConfig(level=logging.INFO, handlers=[file_handler])
 
-file_handler = logging.FileHandler('process.log')
-file_handler.setLevel(logging.INFO)
-file_formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
-file_handler.setFormatter(file_formatter)
-logger.addHandler(file_handler)
-
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
-console_handler.setFormatter(console_formatter)
-logger.addHandler(console_handler)
+# console_handler = logging.StreamHandler()
+# console_handler.setLevel(logging.INFO)
+# console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+# console_handler.setFormatter(console_formatter)
+# logger.addHandler(console_handler)
 
 # Chave da API do YouTube
 YOUTUBE_API_KEY = 'AIzaSyAcYrb9k3rHmYdvQcR1EO8MpBYPmHAYt7M'  # Substitua pela sua nova chave de API
 
+logging.info("----  INICIANDO LOGICA DE DOWNLOAD DO YOUTUBE ----")
+
 def sanitize_filename(filename):
-    """Remove caracteres inválidos do título do vídeo para salvar corretamente no sistema de arquivos."""
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
+    """Remove caracteres inválidos do título do vídeo e substitui espaços por underscores."""
+    sanitized = re.sub(r'[\\/*?:"<>|]', "", filename)
+    sanitized = re.sub(r'\s+', '_', sanitized)
+    return sanitized
 
 def get_latest_video_from_channel(channel_id):
     """Retorna o último vídeo de um canal usando a API do YouTube, ignorando lives ao vivo."""
@@ -79,7 +80,7 @@ def download_video(video_url, video_title):
         logging.info(f"Iniciando download do vídeo: {video_title}")
 
         # Diretório onde o vídeo será salvo
-        video_dir = Path('/mnt/c/Users/TI/Project/videos')
+        video_dir = Path('videos')
         video_dir.mkdir(parents=True, exist_ok=True)
 
         # Sanitizar o título do vídeo para criar um nome de arquivo válido
@@ -120,6 +121,7 @@ def process_latest_video():
         if video_path and os.path.exists(video_path):
             logging.info(f"Vídeo baixado com sucesso em: {video_path}")
             print(f"Vídeo baixado com sucesso em: {video_path}")
+            logging.info("----  FINALIZANDO LOGICA DE DOWNLOAD DO YOUTUBE ----")
         else:
             logging.error("Falha no download do vídeo.")
             print("Falha no download do vídeo. Verifique os logs para mais detalhes.")

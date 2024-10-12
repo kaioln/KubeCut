@@ -17,8 +17,7 @@ from transformers import logging as hf_logging
 import subprocess
 import shutil
 import pysrt
-from googleapiclient.discovery import build
-from yt_dlp import YoutubeDL
+import glob
 
 # Supressão de avisos da biblioteca transformers
 hf_logging.set_verbosity_error()
@@ -38,11 +37,12 @@ BASE_DIR = Path(__file__).resolve().parent
 # Diretórios
 SUBTITLE_DIR = BASE_DIR / config['directories']['subtitles']
 CLIPS_DIR = BASE_DIR / config['directories']['clips']
+FINAL_DIR = BASE_DIR / config['directories']['processed']
 LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
 VIDEOS_DIR = BASE_DIR / config['directories']['videos']
 AUDIO_DIR = BASE_DIR / config['directories']['audio']
 
-# Parâmetros
+# Parametros
 num_topics = config['video_processing']['num_topics']
 num_keywords = config['video_processing']['num_keywords']
 min_duration = config['video_processing']['min_duration']
@@ -53,24 +53,16 @@ font_file = config['font_file']
 # Carregar o modelo Whisper do config.json
 whisper_model = whisper.load_model(config['whisper_model'])
 
-# Carregar o score mínimo no sentimento do config.json
+# Carregar o score minimo no sentimento do config.json
 min_sent_score = config['video_processing']['min_sentiment_score']
-
-def ensure_directories_exist():
-    """Garante que as pastas necessárias existam antes de configurar o logging."""
-    directories = [SUBTITLE_DIR, CLIPS_DIR, LOGS_DIR, VIDEOS_DIR, AUDIO_DIR]
-    for directory in directories:
-        directory.mkdir(parents=True, exist_ok=True)
-
-ensure_directories_exist()
 
 # Configuração do logging
 log_filename = LOGS_DIR / config['directories']['logs']['archive']
-logging.basicConfig(
-    filename=log_filename,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+file_handler = logging.FileHandler(log_filename, encoding='utf-8')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logging.basicConfig(level=logging.INFO, handlers=[file_handler])
 
 # Inicializa os pipelines com base nas configurações
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -91,94 +83,6 @@ ner_tokenizer = BertTokenizer.from_pretrained(config['ner_model'])
 
 # Inicializa o pipeline de NER
 ner_analyzer = pipeline("ner", model=ner_model, tokenizer=ner_tokenizer, aggregation_strategy="simple")
-
-# Chave da API do YouTube
-YOUTUBE_API_KEY = 'AIzaSyAcYrb9k3rHmYdvQcR1EO8MpBYPmHAYt7M'  # Substitua pela sua nova chave de API
-
-def sanitize_filename(filename):
-    """Remove caracteres inválidos do título do vídeo para salvar corretamente no sistema de arquivos."""
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
-
-def get_latest_video_from_channel(channel_id):
-    """Retorna o último vídeo de um canal usando a API do YouTube, ignorando lives ao vivo."""
-    try:
-        logging.info("Inicializando a API do YouTube.")
-        youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-
-        # Pega os vídeos do canal
-        logging.info(f"Buscando vídeos do canal ID: {channel_id}")
-        request = youtube.search().list(
-            part='snippet',
-            channelId=channel_id,
-            order='date',
-            maxResults=5  # Buscar mais vídeos para evitar lives
-        )
-        response = request.execute()
-
-        if response['items']:
-            logging.info(f"Número de vídeos encontrados: {len(response['items'])}")
-            for video in response['items']:
-                live_content = video['snippet'].get('liveBroadcastContent')
-                logging.info(f"Verificando se o vídeo é uma live: {video['snippet']['title']} ({live_content})")
-                if live_content == 'live':
-                    logging.info(f"Ignorando live ao vivo: {video['snippet']['title']}")
-                    continue
-
-                video_id = video['id'].get('videoId')
-                if not video_id:
-                    logging.warning(f"Vídeo sem ID válido encontrado: {video['snippet']['title']}")
-                    continue
-
-                video_title = video['snippet']['title']
-                video_url = f'https://www.youtube.com/watch?v={video_id}'
-                logging.info(f"Último vídeo válido encontrado: {video_title} ({video_url})")
-                return video_url, video_title
-
-            logging.error("Nenhum vídeo válido encontrado (somente lives ou vídeos sem ID).")
-            return None, None
-        else:
-            logging.error("Nenhum vídeo encontrado no canal.")
-            return None, None
-
-    except Exception as e:
-        logging.error(f"Erro ao acessar a API do YouTube: {str(e)}", exc_info=True)
-        return None, None
-
-def download_video(video_url, video_title):
-    """Faz o download de um vídeo do YouTube usando yt-dlp e salva no diretório especificado."""
-    try:
-        logging.info(f"Iniciando download do vídeo: {video_title}")
-
-        # Diretório onde o vídeo será salvo
-        video_dir = Path('/mnt/c/Users/TI/Project/videos')
-        video_dir.mkdir(parents=True, exist_ok=True)
-
-        # Sanitizar o título do vídeo para criar um nome de arquivo válido
-        sanitized_title = sanitize_filename(video_title)
-        video_path = video_dir / f"{sanitized_title}.mp4"
-
-        # Verifica se o vídeo já foi baixado
-        if video_path.exists():
-            logging.info(f"Vídeo já foi baixado anteriormente: {video_path}")
-            return video_path
-
-        # Opções para o yt-dlp
-        ydl_opts = {
-            'format': 'best',  # Baixar na melhor qualidade disponível
-            'outtmpl': str(video_path),  # Define o caminho e o nome do arquivo
-            'noplaylist': True,  # Não baixar playlists
-        }
-
-        # Faz o download do vídeo usando yt-dlp
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_url])
-
-        logging.info(f"Vídeo baixado com sucesso em: {video_path}")
-        return video_path
-
-    except Exception as e:
-        logging.error(f"Erro ao baixar o vídeo: {str(e)}", exc_info=True)
-        return None
 
 def clean_text(text):
     """Remove caracteres especiais e limpa o texto.""" 
@@ -203,7 +107,7 @@ def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""    
     logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
     try:
-        result = whisper_model.transcribe(audio_path, verbose=True)
+        result = whisper_model.transcribe(audio_path, verbose=False)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
     except Exception as e:
@@ -376,8 +280,7 @@ def create_combined_segment(segments, start_time):
 
 def add_subtitle(clip_path, srt_filename, font_size=25, 
                  font_color="16777215", border_color="0", border_width=12,
-                 alignment=2, width=1080, 
-                 height=1920, x=None, y=None):
+                 alignment=2):
 
     srt_temp_file = None  # Inicializa como None para garantir que exista
     try:
@@ -401,28 +304,41 @@ def add_subtitle(clip_path, srt_filename, font_size=25,
                 end_time = f"{sub.end.hours:02}:{sub.end.minutes:02}:{sub.end.seconds:02},{sub.end.milliseconds:03}"
                 f.write(f"{start_time} --> {end_time}\n")
                 f.write(f"{sub.text}\n\n")
-    
-        # Atualizar o comando FFmpeg para apenas adicionar as legendas sem crop
+        if clip_path is not None:
+            temp_output_path = clip_path.replace('.mp4', '_temp.mp4')
+        else:
+            logging.error("O caminho do clipe é None.")
+        temp_output_path = clip_path.replace('.mp4', '_temp.mp4')
+        
         command = [
             'ffmpeg',
-            '-y', 
+            '-y',
+            '-loglevel', 'error',
             '-i', clip_path,
-            '-vf', (f"subtitles={srt_temp_file}:force_style='FontName={font_file},"
+            '-vf', (f"subtitles={srt_temp_file}:"
+                    f"force_style='FontName={font_file},"
                     f"FontSize={font_size},"
                     f"PrimaryColour={font_color},"
                     f"BorderStyle=1,"
                     f"Outline={border_width},"
                     f"OutlineColour={border_color},"
-                    f"Alignment={alignment}'"
-                ),
-            '-codec:a', 'copy', 
-            'temp_subtitled.mp4'
+                    f"Alignment={alignment}',"
+                    f"setpts=PTS/1.05,"
+                    f"eq=contrast=1.2:saturation=1.1"
+            ),
+            '-movflags', '+faststart',
+            '-metadata', 'comment=Video processed for copyright camouflage',
+            '-af', 'atempo=1.05',
+            '-c:v', 'libx264',  
+            '-c:a', 'aac',  
+            '-b:a', '192k',  
+            temp_output_path
         ]
         
         subprocess.run(command, check=True)
-        logging.info(f"Legenda adicionada com sucesso no vídeo '{clip_path}'. Arquivo de saída temporário: 'temp_subtitled.mp4'")
+        logging.info(f"Legenda adicionada com sucesso no vídeo '{clip_path}'. Arquivo de saída temporário: {temp_output_path}")
         
-        shutil.move('temp_subtitled.mp4', clip_path)
+        shutil.move(temp_output_path, clip_path)
         logging.info(f"O arquivo temporário foi movido para substituir o original: {clip_path}")
         
     except ValueError as e:
@@ -522,48 +438,13 @@ def save_clips(video_path, selected_segments, unique_id, video_name):
             # Salvar o clipe com foco ajustado e transições
             focused_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
 
+            clips_saved.append(clip_path)
+
             # Gerar e adicionar legendas
             srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
             add_subtitle(str(clip_path), srt_filename)
             logging.info(f"Clip salvo: {clip_path}")
-
-            # Aplicar remoção de metadados e camuflagem
-            # Caminho temporário para o vídeo camuflado
-            camouflaged_video_path = str(clip_path).replace(".mp4", "_temp.mp4")
-
-            # Comando FFmpeg para remoção de metadados e aplicação de camuflagem
-            ffmpeg_command = [
-                'ffmpeg',
-                '-i', str(clip_path),
-                
-                # Ajustar tempo do vídeo e aplicar efeitos de contraste e saturação
-                '-vf', 'setpts=PTS/1.05,eq=contrast=1.2:saturation=1.1',
-                
-                # Ajustar tempo do áudio sem mudar a taxa de amostragem
-                '-af', 'atempo=1.05',
-                
-                '-c:v', 'libx264',  # Codec de vídeo
-                '-c:a', 'aac',      # Codec de áudio
-                
-                # Melhoria no carregamento e configuração de metadados
-                '-movflags', '+faststart',  
-                '-metadata', 'comment=Video processed for copyright camouflage',
-                
-                '-y',  # Sobrescrever sem perguntar
-                camouflaged_video_path  # Caminho para o vídeo camuflado temporário
-            ]
-
-
-            # Executar o comando FFmpeg
-            subprocess.run(ffmpeg_command, check=True)
-            logging.info(f"Metadados removidos e vídeo camuflado salvo em: {camouflaged_video_path}")
-
-            # Substituir o arquivo original pelo vídeo camuflado
-            subprocess.run(['mv', camouflaged_video_path, str(clip_path)])
-            logging.info(f"Vídeo camuflado salvo como: {clip_path}")
-
-            clips_saved.append(clip_path)  # O caminho do clipe salvo
-
+            
         except Exception as e:
             logging.error(f"Erro ao salvar o clipe {clip_filename}: {e}")
 
@@ -638,10 +519,10 @@ def generate_srt_from_video(video_path, srt_output_path):
 
     return srt_output_path
 
-
 def process_video(video_path):
     """Processa o vídeo completo, extraindo o áudio, transcrevendo, selecionando e salvando clipes."""  
-    audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}.mp3"
+    audio_output_path = AUDIO_DIR / f"{Path(video_path).stem}_TEMP.mp3"
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     unique_id = generate_unique_id()  # Gera um ID único
     video_name = os.path.splitext(os.path.basename(video_path))[0]
 
@@ -662,12 +543,20 @@ def process_video(video_path):
     finally:
         clean_up_audio_files()
 
-if __name__ == "__main__":
-    # Substitua 'seu_channel_id' pelo ID do canal desejado
-    channel_id = 'UC69JW8XvnPjXZfysWQqOk4Q'  
-    video_url, video_title = get_latest_video_from_channel(channel_id)
+def crean_temp_archives(diretorio):
+    padrao_temp = os.path.join(diretorio, '*TEMP*')
+    arquivos_temp = glob.glob(padrao_temp)
+    if arquivos_temp:
+        for arquivo in arquivos_temp:
+            try:
+                os.remove(arquivo)
+                print(f"Arquivo {arquivo} removido com sucesso.")
+            except Exception as e:
+                print(f"Erro ao remover {arquivo}: {e}")
+    else:
+        print("Nenhum arquivo TEMP encontrado.")
 
-    if video_url:
-        video_path = download_video(video_url, video_title)
-        if video_path:
-            process_video(video_path)
+if __name__ == "__main__":
+    video_file_path = sys.argv[1]
+    process_video(video_file_path)
+    crean_temp_archives(BASE_DIR)
