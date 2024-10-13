@@ -1,8 +1,8 @@
 {
   "video_processing": {
-    "min_sentiment_score": 0.95,
+    "min_sentiment_score": 0.9,
     "num_topics": 5,
-    "num_keywords": 15,
+    "num_keywords": 5,
     "min_duration": 60,
     "max_duration": 90
   },
@@ -17,7 +17,7 @@
     "audio": "audio"
   },
   "font_file": "ariali.ttf",
-  "max_words_per_segment": 25,
+  "max_words_per_segment": 15,
   "whisper_model": "tiny",
   "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",
   "emotion_model": "j-hartmann/emotion-english-distilroberta-base",
