@@ -100,3 +100,4 @@ terraform.tfstate
 *.log
 *.srt
 *.wav
+*.part

@@ -107,7 +107,7 @@ def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""    
     logging.info(f"Iniciando a transcrição do áudio: {audio_path}")
     try:
-        result = whisper_model.transcribe(audio_path, verbose=False)
+        result = whisper_model.transcribe(audio_path, verbose=True)
         logging.info("Transcrição concluída com sucesso")
         return result["segments"]
     except Exception as e:
@@ -278,8 +278,8 @@ def create_combined_segment(segments, start_time):
         'sentiment_score': segments[-1]['sentiment_score']
     }
 
-def add_subtitle(clip_path, srt_filename, font_size=25, 
-                 font_color="16777215", border_color="0", border_width=12,
+def add_subtitle(clip_path, srt_filename, font_size=20, 
+                 font_color="16777215", border_color="0", border_width=2,
                  alignment=2):
 
     srt_temp_file = None  # Inicializa como None para garantir que exista
@@ -313,8 +313,9 @@ def add_subtitle(clip_path, srt_filename, font_size=25,
         command = [
             'ffmpeg',
             '-y',
-            '-loglevel', 'error',
+            #'-loglevel', 'error',
             '-i', clip_path,
+            '-r', '30', #taxa de quadros (padrao do ffmpeg é 25)
             '-vf', (f"subtitles={srt_temp_file}:"
                     f"force_style='FontName={font_file},"
                     f"FontSize={font_size},"
@@ -354,18 +355,40 @@ def add_subtitle(clip_path, srt_filename, font_size=25,
             os.remove(srt_temp_file)
             logging.info(f"Arquivo temporário {srt_temp_file} removido com sucesso.")
 
-def adjust_focus(clip):
-    # Converter o primeiro frame para OpenCV
+def adjust_focus(clip, platform):
+    """Ajusta o foco e realiza o crop do vídeo mantendo as proporções e com foco em rostos."""
+    
+    # Dimensões da plataforma de destino
+    platform_dimensions = {
+        'instagram_feed': (1080, 1080),
+        'instagram_reels': (1080, 1920),
+        'tiktok': (1080, 1920),
+        'youtube': (1920, 1080)
+    }
+    
+    if platform not in platform_dimensions:
+        raise ValueError(f"Plataforma {platform} não suportada. Escolha entre: {list(platform_dimensions.keys())}")
+
+    target_width, target_height = platform_dimensions[platform]
+
+    # Dimensões do vídeo original
+    original_width, original_height = clip.size
+    
+    # Calcular a proporção do vídeo original e do destino
+    original_ratio = original_width / original_height
+    target_ratio = target_width / target_height
+
+    # Detectar a face no primeiro frame
     frame = clip.get_frame(0)
     frame_cv = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    
+
     # Carregar o classificador de faces pré-treinado do OpenCV
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    
+
     # Detectar faces no frame
     gray = cv2.cvtColor(frame_cv, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-    
+
     if len(faces) > 0:
         # Supondo que a primeira face detectada é a principal
         (x, y, w, h) = faces[0]
@@ -373,43 +396,30 @@ def adjust_focus(clip):
         center_y = y + h // 2
     else:
         # Se nenhuma face for detectada, manter o foco central
-        center_x = frame.shape[1] // 2
-        center_y = frame.shape[0] // 2
-    
-    # Definir as dimensões do crop para 1080x1920
-    crop_width = 1080
-    crop_height = 1920
-    
-    # Calcular os limites do crop
-    x1 = center_x - crop_width // 2
-    y1 = center_y - crop_height // 2
-    x2 = x1 + crop_width
-    y2 = y1 + crop_height
-    
-    # Ajustar x1 e y1 se o crop exceder os limites do frame
-    if x1 < 0:
-        x1 = 0
-        x2 = crop_width
-    if y1 < 0:
-        y1 = 0
-        y2 = crop_height
-    if x2 > frame.shape[1]:
-        x2 = frame.shape[1]
-        x1 = x2 - crop_width
-    if y2 > frame.shape[0]:
-        y2 = frame.shape[0]
-        y1 = y2 - crop_height
-    
-    # Garantir que as coordenadas do crop estejam dentro dos limites do frame
-    x1 = max(x1, 0)
-    y1 = max(y1, 0)
-    x2 = min(x2, frame.shape[1])
-    y2 = min(y2, frame.shape[0])
-    
+        center_x = original_width // 2
+        center_y = original_height // 2
+
+    # Aplicar o corte proporcional baseado na detecção de rosto
+    if original_ratio > target_ratio:
+        # Cortar horizontalmente (mais largo que o necessário)
+        new_width = int(target_ratio * original_height)
+        x1 = max(center_x - new_width // 2, 0)
+        x2 = min(x1 + new_width, original_width)
+        y1, y2 = 0, original_height
+    else:
+        # Cortar verticalmente (mais alto que o necessário)
+        new_height = int(original_width / target_ratio)
+        y1 = max(center_y - new_height // 2, 0)
+        y2 = min(y1 + new_height, original_height)
+        x1, x2 = 0, original_width
+
     # Aplicar o crop ao clipe
-    focused_clip = clip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
-    
-    return focused_clip
+    cropped_clip = clip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+
+    # Redimensionar para as dimensões de destino
+    resized_clip = cropped_clip.resize(newsize=(target_width, target_height))
+
+    return resized_clip
 
 def save_clips(video_path, selected_segments, unique_id, video_name):
     """Salva os clipes selecionados em uma nova pasta, usando SRTs para nomeação e referência."""
@@ -430,7 +440,7 @@ def save_clips(video_path, selected_segments, unique_id, video_name):
             clip = video.subclip(start_time, end_time)
             
             # Ajustar o foco no clipe
-            focused_clip = adjust_focus(clip)
+            focused_clip = adjust_focus(clip, platform="tiktok") # instagram_feed - instagram_reels - tiktok - youtube
             
             # Adicionar transições suaves
             focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
