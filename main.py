@@ -41,6 +41,7 @@ FINAL_DIR = BASE_DIR / config['directories']['processed']
 LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
 VIDEOS_DIR = BASE_DIR / config['directories']['videos']
 AUDIO_DIR = BASE_DIR / config['directories']['audio']
+WORDS_DIR = BASE_DIR / config['directories']['prohibited_words']['dir']
 
 # Parametros
 num_topics = config['video_processing']['num_topics']
@@ -101,7 +102,6 @@ def extract_audio(video_path, audio_output_path):
     except Exception as e:
         logging.error(f"Erro ao extrair áudio: {e}")
         raise
-
 
 def transcribe_audio(audio_path):
     """Transcreve o áudio utilizando o modelo Whisper."""    
@@ -278,8 +278,8 @@ def create_combined_segment(segments, start_time):
         'sentiment_score': segments[-1]['sentiment_score']
     }
 
-def add_subtitle(clip_path, srt_filename, font_size=20, 
-                 font_color="16777215", border_color="0", border_width=2,
+def add_subtitle(clip_path, srt_filename, font_size=18, 
+                 font_color="16777215", border_color="0", border_width=3,
                  alignment=2):
 
     srt_temp_file = None  # Inicializa como None para garantir que exista
@@ -446,7 +446,7 @@ def save_clips(video_path, selected_segments, unique_id, video_name):
             focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
             
             # Salvar o clipe com foco ajustado e transições
-            focused_clip.write_videofile(str(clip_path), codec="libx264", audio_codec="aac")
+            focused_clip.write_videofile(str(clip_path))#, codec="libx264", audio_codec="aac")
 
             clips_saved.append(clip_path)
 
@@ -494,15 +494,36 @@ def split_transcript_into_segments(segments):
     
     return divided_segments
 
-# Geração do arquivo SRT
+# Dicionário de palavras ofensivas e suas substituições
+def load_prohibited_words(file_path):
+    """Carrega palavras proibidas de um arquivo de texto e retorna um dicionário."""
+    prohibited_words = {}
+    with open(file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            word, replacement = line.strip().split('=')
+            prohibited_words[word] = replacement
+    return prohibited_words
+
+# Função para substituir palavras ofensivas com base no dicionário
+def censor_text(text, prohibited_words):
+    """Substitui palavras proibidas no texto de acordo com o dicionário."""
+    for word, replacement in prohibited_words.items():
+        text = text.replace(word, replacement)
+    return text
+
 def generate_srt(segments, srt_output_path):
-    """Gera um arquivo SRT a partir de uma lista de segmentos."""
+    """Gera um arquivo SRT a partir de uma lista de segmentos, com filtro de palavras ofensivas."""
+    prohibited_words_path = WORDS_DIR / config['directories']['prohibited_words']['archive']
+    WORDS_DIR.mkdir(parents=True, exist_ok=True)
+    prohibited_words = load_prohibited_words(prohibited_words_path)
     subs = pysrt.SubRipFile()
-    
+
     for i, segment in enumerate(segments):
         start_time = pysrt.SubRipTime(seconds=segment['start'])
         end_time = pysrt.SubRipTime(seconds=segment['end'])
-        text = segment['text']
+
+        # Substitui palavras ofensivas no texto do segmento
+        text = censor_text(segment['text'], prohibited_words)
         
         sub = pysrt.SubRipItem(index=i + 1, start=start_time, end=end_time, text=text)
         subs.append(sub)

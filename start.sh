@@ -12,7 +12,7 @@ fi
 
 # Diretórios definidos no config.json
 VIDEOS_DIR=$(jq -r '.directories.videos' "$CONFIG_FILE")
-FINAL_DIR=$(jq -r '.directories.final' "$CONFIG_FILE")
+FINAL_DIR=$(jq -r '.directories.processed' "$CONFIG_FILE")
 
 # Verifica se o comando 'jq' retornou um valor válido
 if [ -z "$VIDEOS_DIR" ] || [ "$VIDEOS_DIR" == "null" ] || [ -z "$FINAL_DIR" ] || [ "$FINAL_DIR" == "null" ]; then

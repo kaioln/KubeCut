@@ -1,25 +1,35 @@
 import os
 import logging
+import json
 import re
 from googleapiclient.discovery import build
 from yt_dlp import YoutubeDL
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega as variáveis do arquivo .env
+load_dotenv()
+
+def load_config():
+    """Carrega as configurações do arquivo JSON."""
+    with open('config.json', 'r') as f:
+        return json.load(f)
+
+# Carregar as configurações
+config = load_config()
+
+# Acessa as variáveis de ambiente
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
+BASE_DIR = Path(__file__).resolve().parent
+LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
 
 # Configuração do logging
-log_filename = "logs/process.log"
+log_filename = LOGS_DIR / config['directories']['logs']['archive']
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 file_handler = logging.FileHandler(log_filename, encoding='utf-8')
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[file_handler])
-
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.INFO)
-# console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-# console_handler.setFormatter(console_formatter)
-# logger.addHandler(console_handler)
-
-# Chave da API do YouTube
-YOUTUBE_API_KEY = 'AIzaSyAcYrb9k3rHmYdvQcR1EO8MpBYPmHAYt7M'  # Substitua pela sua nova chave de API
 
 logging.info("----  INICIANDO LOGICA DE DOWNLOAD DO YOUTUBE ----")
 
@@ -58,7 +68,7 @@ def get_latest_video_from_channel(channel_id):
                 if not video_id:
                     logging.warning(f"Vídeo sem ID válido encontrado: {video['snippet']['title']}")
                     continue
-
+                # video_id = "Gj17xz3DHIc" #pra baixar um video especifico q eu queira
                 video_title = video['snippet']['title']
                 video_url = f'https://www.youtube.com/watch?v={video_id}'
                 logging.info(f"Último vídeo válido encontrado: {video_title} ({video_url})")

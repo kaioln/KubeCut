@@ -15,10 +15,14 @@
       "archive": "process.log"
     },
     "videos": "videos",
-    "audio": "audio"
+    "audio": "audio",
+    "prohibited_words": {
+      "dir": "words", 
+      "archive": "prohibited.word"
+    }
   },
   "font_file": "Comic Sans MS",
-  "max_words_per_segment": 15,
+  "max_words_per_segment": 5,
   "whisper_model": "tiny",
   "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",
   "emotion_model": "j-hartmann/emotion-english-distilroberta-base",
