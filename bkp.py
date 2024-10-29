@@ -99,34 +99,32 @@ def analisar_transcricao(transcricao):
     """Envia a transcrição completa para o GPT-4 para sugerir cortes de forma mais resumida."""
     prompt = f"""
     Abaixo está a transcrição de um vídeo. Analise e divida os trechos em duas categorias: 
-    Pontos relevantes e Pontos irrelevantes. 
+    pontos relevantes e pontos irrelevantes. 
     Crie uma síntese objetiva dos principais momentos do vídeo para cada corte, 
-    com variações de 2 a 3 minutos cada, que transmitam a ideia central e um fluxo coerente.
+    com 10 variações de 2 a 3 minutos cada, que transmitam a ideia central e um fluxo coerente.
+
+    Cada corte deve ter:
+
+    Pontos relevantes: momentos importantes, com marcação de minutos e segundos.
+    Pontos irrelevantes: trechos que podem ser ignorados, com marcação de minutos e segundos.
+    Um resumo com no máximo 255 caracteres.
+    Cinco hashtags relevantes ao conteúdo.
+    Um score de viralização entre 0 e 10, indicando o potencial de engajamento.
 
     {transcricao}
 
-    Cada corte deve ter:
-    Pontos relevantes: momentos importantes, com marcação de minutos e segundos.
-    Pontos irrelevantes: trechos que podem ser ignorados, com marcação de minutos e segundos.
-    Cinco hashtags relevantes ao conteúdo.
-    Um resumo com no máximo 255 caracteres.
-    Um score de viralização entre 0 e 10, indicando o potencial de engajamento, para as plataformas de tiktok, shorts, reels.
-
     Sugira apenas os trechos que contêm os momentos mais importantes, em minutos e segundos.
     Formato de saída (OBS.: Não alterar este modelo de saída!):
-    ---
-    *Corte 4:*
+
     Pontos relevantes:
-    - De 00:01 a 03:00: Discussão sobre investimento
+
+    De 00:01 a 03:00: Discussão sobre investimento
+    De 06:00 a 08:00: Conclusão financeira
     Pontos irrelevantes:
-    - De 00:00 a 00:40: Introdução irrelevante
-    Hashtags:
-    #investimento #finanças #sucesso #crescimento #dinheiro 
-    Resumo: 
-    Foco nas melhores estratégias de investimento e no crescimento financeiro.
-    Score:
-    8.5
-    ---
+
+    De 00:00 a 00:40: Introdução irrelevante
+    De 03:40 a 04:45: Comentários pessoais
+    Hashtags: #investimento #finanças #sucesso #crescimento #dinheiro Resumo: Foco nas melhores estratégias de investimento e no crescimento financeiro. Score: 8.5
 
     Repita o formato acima para os 10 cortes, garantindo que cada vídeo mantenha um sentido lógico e apresente variações de momentos importantes para atender diferentes enfoques.
 
@@ -134,7 +132,7 @@ def analisar_transcricao(transcricao):
     - De 20:40 ao final: Abordagens iniciais
 
     Indique quais minutos são irrelevantes e podem ser ignorados.
-    ALERTA: A precisão dos minutos e segundos é crucial para a extração dos cortes. Extraia apenas 1 ponto de cada com seu tempo total.
+    ALERTA: A precisão dos minutos e segundos é crucial para a extração dos cortes.
     """
 
     response = client.chat.completions.create(
@@ -160,14 +158,49 @@ def converter_tempo(tempo):
     
     return horas * 3600 + minutos * 60 + segundos
 
+def juntar_videos(cortes):
+    """Junta os vídeos especificados na lista 'cortes' em um ou mais vídeos concatenados."""
+
+    cortes = list(dict.fromkeys(cortes))  # Remove duplicatas
+
+    if not cortes:
+        print("Nenhum corte para juntar.")
+        return
+
+    # Criar um arquivo temporário para a lista de arquivos
+    file_list_path = "temp/file_list.txt"
+    with open(file_list_path, "w") as f:
+        for corte in cortes:
+            f.write(f"file '{os.path.abspath(corte)}'\n")
+
+    # Lista para os caminhos dos vídeos de saída
+    video_output_paths = ["temp/video_final_1.mp4"]
+
+    # Executar o comando FFmpeg para cada arquivo de saída
+    for video_output_path in video_output_paths:
+        try:
+            command = [
+                "ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+                "-i", file_list_path,
+                "-vf", "fps=60", "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
+                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", video_output_path
+            ]
+            subprocess.call(command, shell=False)
+            print(f"Vídeo final {video_output_path} criado com sucesso!")
+        except Exception as e:
+            print(f"Erro ao criar o vídeo final {video_output_path}: {e}")
+        # finally:
+        #     if os.path.exists(file_list_path):
+        #         os.remove(file_list_path)
+
+    return video_output_paths
+  
+
 def extrair_tempo(linha):
     # Usar regex para capturar os tempos no formato hh:mm ou mm:ss
     match = re.findall(r'\d{2}:\d{2}(?::\d{2})?', linha)
     
-    if len(match) == 1 and "ao final" in linha.lower():
-        # Retorna o início e um indicador de que é até o final
-        return match[0], None
-    elif len(match) == 2:
+    if len(match) == 2:
         inicio = match[0]
         fim = match[1]
         return inicio, fim
@@ -175,51 +208,31 @@ def extrair_tempo(linha):
         raise ValueError(f"Formato de tempo inválido: {linha}")
 
 def extrair_trechos_relevantes(sugestoes):
-    """Extrai e agrupa trechos relevantes contínuos da sugestão do GPT-4."""
+    """Extrai os trechos relevantes da sugestão do GPT-4."""
     trechos_relevantes = []
-    continuar = False
-    inicio_atual, fim_atual = None, None
-
+    continuar = False  # Flag para identificar se estamos nos trechos relevantes
+    
     for linha in sugestoes.split("\n"):
         if "Pontos relevantes:" in linha:
             continuar = True
         elif "Pontos irrelevantes:" in linha:
             continuar = False
         elif continuar and "-" in linha:
+            # Extrai o trecho relevante com base no formato
             inicio, fim = extrair_tempo(linha)
-
-            # Agrupar trechos contínuos
-            if fim_atual and converter_tempo(inicio) == converter_tempo(fim_atual):
-                fim_atual = fim  # Extende o fim do trecho atual
-            else:
-                if inicio_atual and fim_atual:  
-                    trechos_relevantes.append((inicio_atual, fim_atual))
-                inicio_atual, fim_atual = inicio, fim  # Inicia um novo trecho
-
-    if inicio_atual and fim_atual:
-        trechos_relevantes.append((inicio_atual, fim_atual))  # Adiciona o último trecho
-
+            trechos_relevantes.append((inicio, fim))
+    
     return trechos_relevantes
-    #return trechos_relevantes[:10]
-
-
 
 def extrair_cortes(video_path, sugestoes):
     """Extrai cortes do vídeo original com base nos trechos relevantes sugeridos pelo GPT-4."""
     cortes = []
     trechos_relevantes = extrair_trechos_relevantes(sugestoes)
     
-    # Carrega o vídeo para obter a duração
-    video = mp.VideoFileClip(video_path)
-    duracao_total = int(video.duration)
-    
-    # Para garantir que cada sugestão gere um único vídeo
-    trechos_unicos = list(dict.fromkeys(trechos_relevantes))  # Remove duplicatas
-
-    for inicio, fim in trechos_unicos:
+    for inicio, fim in trechos_relevantes:
         try:
             inicio_seg = converter_tempo(inicio)
-            fim_seg = converter_tempo(fim) if fim is not None else duracao_total
+            fim_seg = converter_tempo(fim)
             
             # Calcula a duração do corte
             duracao_corte = fim_seg - inicio_seg
@@ -238,40 +251,23 @@ def extrair_cortes(video_path, sugestoes):
             print(f"Erro ao processar o trecho {inicio} a {fim}: {e}")
             continue
 
-    video.close()  # Fecha o vídeo após o processamento
-
-    if not cortes:
-        print("Nenhum corte para retornar.")
-        return []
-
-    print("Lista de caminhos dos cortes:", cortes)
     return cortes
 
 # Código principal que usa as funções acima
 def processar_video_para_cortes(video_path):
-    """Processa o vídeo e gera cortes sugeridos pelo GPT-4, com detalhes de resumo, hashtags e score."""
+    """Processa o vídeo e gera cortes sugeridos pelo GPT-4."""
     print("Transcrevendo o vídeo...")
     transcricao = transcrever_video(video_path)
 
     print("Analisando transcrição para gerar sugestões de cortes...")
     sugestoes = analisar_transcricao(transcricao)
-    # print("Sugestões do GPT-4:\n", sugestoes)
 
-    # Extrair e exibir resumo, hashtags e score para cada corte usar depois
-    print("Detalhes de resumo, hashtags e score dos vídeos:")
-    for i, corte in enumerate(sugestoes.split("---")[1:11], start=1):  # Limita a 10 cortes
-        resumo = re.search(r"Resumo:\s*(.+)", corte)
-        hashtags = re.search(r"Hashtags:\s*(.+)", corte)
-        score = re.search(r"Score:\s*(.+)", corte)
-        
-        if resumo and hashtags and score:
-            print(f"\nCorte {i}:")
-            print("Resumo:", resumo.group(1).strip())
-            print("Hashtags:", hashtags.group(1).strip())
-            print("Score:", score.group(1).strip())
-    
     print("Extraindo cortes com base nas sugestões de trechos relevantes...")
-    video_final = extrair_cortes(video_path, sugestoes)
+    cortes = extrair_cortes(video_path, sugestoes)
+
+    print("Juntando cortes em um único vídeo final...")
+    video_final = juntar_videos(cortes)
 
     print("Processo completo!")
+
     return video_final

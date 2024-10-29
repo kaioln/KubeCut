@@ -76,6 +76,7 @@ fi
 # Loop para processar todos os arquivos de vídeo no diretório
 for VIDEO_PATH in "${VIDEOS[@]}"; do
     if [ -f "$VIDEO_PATH" ]; then
+        mkdir -p "$BASE_DIR/logs"
         echo "$(date '+%Y-%m-%d %H:%M:%S,%3N') - INFO - Processando vídeo: $VIDEO_PATH" >> "$BASE_DIR/logs/process.log"
 
         # Chama o script Python com o caminho do vídeo
@@ -91,7 +92,7 @@ for VIDEO_PATH in "${VIDEOS[@]}"; do
         if [ -e "$DESTINATION" ]; then
             echo "$(date '+%Y-%m-%d %H:%M:%S,%3N') - WARNING - O arquivo $NEW_FILENAME já existe em $FINAL_DIR. O arquivo não foi movido." >> "$BASE_DIR/logs/process.log"
         else
-            mv "$VIDEO_PATH" "$DESTINATION" # HABILITAR DEPOIS SO PRA N FICAR MEXENDO COM VIDEO
+            # mv "$VIDEO_PATH" "$DESTINATION" # HABILITAR DEPOIS SO PRA N FICAR MEXENDO COM VIDEO
             if [ $? -eq 0 ]; then
                 echo "$(date '+%Y-%m-%d %H:%M:%S,%3N') - INFO - O arquivo $VIDEO_PATH foi movido com sucesso para: $DESTINATION" >> "$BASE_DIR/logs/process.log"
             else

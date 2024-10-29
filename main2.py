@@ -6,8 +6,6 @@ import cv2
 import moviepy.editor as mp
 from pathlib import Path
 import json
-import warnings
-from transformers import logging as hf_logging
 import subprocess
 import shutil
 import pysrt
@@ -22,10 +20,6 @@ from openai import OpenAI
 load_dotenv()
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
-# Supressão de avisos da biblioteca transformers
-# hf_logging.set_verbosity_error()
-# warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
 def load_config():
     """Carrega as configurações do arquivo JSON."""
@@ -116,7 +110,7 @@ def save_subtitles(segments, output_dir, unique_id, video_name):
     return subtitles_subfolder 
 
 def add_subtitle(clip_path, srt_filename, font_size=18, 
-                 font_color="16777215", border_color="0", border_width=3,
+                 font_color="16777215", border_color="0", border_width=2,
                  alignment=2):
 
     srt_temp_file = None  # Inicializa como None para garantir que exista
@@ -150,7 +144,7 @@ def add_subtitle(clip_path, srt_filename, font_size=18,
         command = [
             'ffmpeg',
             '-y',
-            #'-loglevel', 'error',
+            '-loglevel', 'error',
             '-i', clip_path,
             '-r', '30',  # Taxa de quadros (padrão do ffmpeg é 25)
             '-vf', (
@@ -259,41 +253,46 @@ def adjust_focus(clip, platform):
 
     return resized_clip
 
-def save_clips(video_path, unique_id, video_name):
-    """Salva os clipes selecionados em uma nova pasta, usando SRTs para nomeação e referência.""" 
+def save_clips(video_paths, unique_id, video_name):
+    """Salva os clipes selecionados de uma lista de vídeos em uma nova pasta, usando SRTs para nomeação e referência."""
+    
+    # Criar a pasta de clipes e legendas apenas uma vez, fora do loop
     clip_subfolder = CLIPS_DIR / f"{video_name}_{unique_id}" 
     clip_subfolder.mkdir(parents=True, exist_ok=True)
 
-    clips_saved = []
-
-    srt_filename = SUBTITLE_DIR / f"{video_name}_{unique_id}/{video_name}_{unique_id}_01.srt"  # caminho SRT
     subtitles_subfolder = SUBTITLE_DIR / f"{video_name}_{unique_id}"
     subtitles_subfolder.mkdir(parents=True, exist_ok=True)
-    clip_filename = f"{video_name}_{unique_id}_01.mp4"  # Nome do clipe
-    clip_path = clip_subfolder / clip_filename
 
-    try:
-        video = mp.VideoFileClip(str(video_path))
-        
-        # Ajustar o foco no clipe
-        focused_clip = adjust_focus(video, platform="tiktok")  # Define a plataforma aqui
-        
-        # Adicionar transições suaves
-        focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
-        
-        # Salvar o clipe com foco ajustado e transições
-        focused_clip.write_videofile(str(clip_path))  # codec="libx264", audio_codec="aac"
+    clips_saved = []
 
-        clips_saved.append(clip_path)
+    # Iterar sobre a lista de vídeos
+    for idx, video_path in enumerate(video_paths, start=1):
+        srt_filename = subtitles_subfolder / f"{video_name}_{unique_id}_{idx:02d}.srt"  # Caminho SRT
+        clip_filename = f"{video_name}_{unique_id}_{idx:02d}.mp4"  # Nome do clipe com índice
+        clip_path = clip_subfolder / clip_filename
 
-        # Gerar e adicionar legendas
-        srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
-        add_subtitle(str(clip_path), srt_filename)
-        logging.info(f"Clip salvo: {clip_path}")
+        try:
+            video = mp.VideoFileClip(str(video_path))
+            
+            # Ajustar o foco no clipe
+            focused_clip = adjust_focus(video, platform="tiktok")  # Define a plataforma aqui
+            
+            # Adicionar transições suaves
+            focused_clip = focused_clip.fx(mp.vfx.fadein, duration=0.5).fx(mp.vfx.fadeout, duration=0.5)
+            
+            # Salvar o clipe com foco ajustado e transições
+            focused_clip.write_videofile(str(clip_path))  # codec="libx264", audio_codec="aac"
+            
+            clips_saved.append(clip_path)
+
+            # Gerar e adicionar legendas
+            srt_filename = generate_srt_from_video(str(clip_path), srt_filename)
+            add_subtitle(str(clip_path), srt_filename)
+            logging.info(f"Clip salvo: {clip_path}")
         
-    except Exception as e:
-        logging.error(f"Erro ao salvar o clipe {clip_filename}: {e}")
-
+        except Exception as e:
+            logging.error(f"Erro ao salvar o clipe {clip_filename}: {e}")
+    
     return clips_saved
 
 def clean_up_audio_files():
@@ -456,11 +455,15 @@ def clean_temp_archives(diretorio):
     arquivos_temp = glob.glob(padrao_temp)
     if arquivos_temp:
         for arquivo in arquivos_temp:
-            try:
-                os.remove(arquivo)
-                print(f"Arquivo {arquivo} removido com sucesso.")
-            except Exception as e:
-                print(f"Erro ao remover {arquivo}: {e}")
+            # Verifica se é um arquivo (não uma pasta) antes de tentar remover
+            if os.path.isfile(arquivo):
+                try:
+                    os.remove(arquivo)
+                    print(f"Arquivo {arquivo} removido com sucesso.")
+                except Exception as e:
+                    print(f"Erro ao remover {arquivo}: {e}")
+            else:
+                print(f"{arquivo} é um diretório, não será removido.")
     else:
         print("Nenhum arquivo TEMP encontrado.")
 

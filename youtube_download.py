@@ -22,7 +22,7 @@ config = load_config()
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 BASE_DIR = Path(__file__).resolve().parent
 LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
-
+print(YOUTUBE_API_KEY)
 # Configuração do logging
 log_filename = LOGS_DIR / config['directories']['logs']['archive']
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ def get_latest_video_from_channel(channel_id):
                 if not video_id:
                     logging.warning(f"Vídeo sem ID válido encontrado: {video['snippet']['title']}")
                     continue
-                # video_id = "Gj17xz3DHIc" #pra baixar um video especifico q eu queira
+                video_id = "OxcxKv6zXC0" #pra baixar um video especifico q eu queira
                 video_title = video['snippet']['title']
                 video_url = f'https://www.youtube.com/watch?v={video_id}'
                 logging.info(f"Último vídeo válido encontrado: {video_title} ({video_url})")
@@ -121,7 +121,7 @@ def download_video(video_url, video_title):
         return None
 
 def process_latest_video():
-    youtube_channel_id = "UC69JW8XvnPjXZfysWQqOk4Q"  # ID do canal desejado
+    youtube_channel_id = "UCOjXqrOxAdXa04obIQREfCA"  # ID do canal desejado
     logging.info("Iniciando o processamento do último vídeo.")
     latest_video_url, latest_video_title = get_latest_video_from_channel(youtube_channel_id)
 
