@@ -4,7 +4,7 @@
 BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Carrega o arquivo de configuração config.json
-CONFIG_FILE="$BASE_DIR/config.json"
+CONFIG_FILE="$BASE_DIR/config/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Arquivo de configuração config.json não encontrado."
     exit 1
@@ -80,7 +80,7 @@ for VIDEO_PATH in "${VIDEOS[@]}"; do
         echo "$(date '+%Y-%m-%d %H:%M:%S,%3N') - INFO - Processando vídeo: $VIDEO_PATH" >> "$BASE_DIR/logs/process.log"
 
         # Chama o script Python com o caminho do vídeo
-        python "$BASE_DIR/main2.py" "$VIDEO_PATH"
+        python "$BASE_DIR/src/main.py" "$VIDEO_PATH"
 
         FILENAME=$(basename "$VIDEO_PATH")
         EXTENSION="${FILENAME##*.}"

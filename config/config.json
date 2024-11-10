@@ -21,6 +21,7 @@
       "archive": "prohibited.word"
     }
   },
+  "platform_post": "tiktok",
   "font_file": "Montserrat",
   "max_words_per_segment": 5,
   "whisper_model": "tiny",

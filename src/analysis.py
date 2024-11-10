@@ -1,99 +1,11 @@
 import os
 import moviepy.editor as mp
-from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
-from pydub import AudioSegment
-from datetime import timedelta
-from concurrent.futures import ThreadPoolExecutor
 import re
-import subprocess
-from dotenv import load_dotenv
-from openai import OpenAI
-
-# Carrega as variáveis do arquivo .env
-load_dotenv()
-
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
-# Certificar-se de que a pasta "temp" existe
-if not os.path.exists("temp"):
-    os.makedirs("temp")
-
-def dividir_audio(audio_path, intervalo=10 * 60):
-    """Divide o áudio em partes menores de 'intervalo' segundos."""
-    audio = AudioSegment.from_file(audio_path)
-    duracao = len(audio) // 1000  # duração em segundos
-    partes = []
-
-    for i in range(0, duracao, intervalo):
-        inicio = i * 1000
-        fim = min((i + intervalo) * 1000, len(audio))
-        parte = audio[inicio:fim]
-        parte_path = f"temp/audio_parte_{i // intervalo}.mp3"
-        parte.export(parte_path, format="mp3")
-        partes.append(parte_path)
-
-    return partes
-
-def transcrever_audio_partes(audio_partes):
-    """Transcreve cada parte do áudio e retorna texto e segmentos."""
-    transcricao_completa = ""
-    todos_segmentos = []
-
-    def transcrever(parte):
-        with open(parte, "rb") as audio_file:
-            response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                response_format="verbose_json",
-            )
-            return response.text, response.segments
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = executor.map(transcrever, audio_partes)
-
-    for transcricao_parcial, segmentos_parciais in results:
-        transcricao_completa += transcricao_parcial + "\n"
-        todos_segmentos.extend(segmentos_parciais)
-
-    # Removendo os arquivos temporários de áudio após a transcrição
-    for parte in audio_partes:
-        if os.path.exists(parte):
-            os.remove(parte)
-
-    return transcricao_completa, todos_segmentos
-
-def gerar_srt(segments, srt_path="temp/transcricao.srt"):
-    """Gera um arquivo SRT a partir dos segmentos do Whisper."""
-    with open(srt_path, "w", encoding="utf-8") as f:
-        for i, segment in enumerate(segments):
-            inicio = str(timedelta(seconds=int(segment.start)))
-            fim = str(timedelta(seconds=int(segment.end)))
-            texto = segment.text.strip()
-
-            f.write(f"{i + 1}\n")
-            f.write(f"{inicio} --> {fim}\n")
-            f.write(f"{texto}\n\n")
-
-    print(f"SRT gerado em: {srt_path}")
-
-def transcrever_video(video_path):
-    """Extrai o áudio do vídeo e faz a transcrição completa."""
-    print("Extraindo áudio do vídeo...")
-    audio_path = "temp/audio_temp.mp3"
-    video = mp.VideoFileClip(video_path)
-    video.audio.write_audiofile(audio_path, codec="mp3", bitrate="192k", ffmpeg_params=["-ar", "44100"])
-
-    print("Dividindo áudio em partes menores...")
-    audio_partes = dividir_audio(audio_path)
-    os.remove(audio_path)  # Remove o áudio completo para economizar espaço
-
-    print("Iniciando transcrição...")
-    transcricao, segmentos = transcrever_audio_partes(audio_partes)
-
-    # Gera o SRT a partir dos segmentos
-    # gerar_srt(segmentos)
-
-    return transcricao
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+from common.models.transcrible_audio import transcrible_audio
+from common.models.configs import TEMP_DIR
+from common.models.logginlog import log_message
+from common.models.prompt_ai import generate_response
 
 def analisar_transcricao(transcricao):
     """Envia a transcrição completa para o GPT-4 para sugerir cortes de forma mais resumida."""
@@ -108,7 +20,15 @@ def analisar_transcricao(transcricao):
     Cada corte deve ter:
     Pontos relevantes: momentos importantes, com marcação de minutos e segundos.
     Pontos irrelevantes: trechos que podem ser ignorados, com marcação de minutos e segundos.
-    Cinco hashtags relevantes ao conteúdo.
+    
+    Gere uma lista de hashtags que maximize o engajamento e sejam viralizáveis nas redes sociais, especialmente no TikTok, Instagram e YouTube. As hashtags devem:
+
+    1- Ser relevantes para o conteúdo e refletir as tendências mais populares da plataforma.
+    2- Atrair público-alvo interessado no tema.
+    3- Utilizar termos e frases de alto engajamento para que a publicação alcance maior visibilidade.
+    4- Incluir hashtags de tendências atuais e gerais que ampliem o alcance, mas ainda tenham relação direta com o tema do conteúdo.
+    5- Me forneça uma lista com cerca de 5 hashtags.
+
     Um resumo com no máximo 255 caracteres.
     Um score de viralização entre 0 e 10, indicando o potencial de engajamento, para as plataformas de tiktok, shorts, reels.
 
@@ -136,16 +56,9 @@ def analisar_transcricao(transcricao):
     Indique quais minutos são irrelevantes e podem ser ignorados.
     ALERTA: A precisão dos minutos e segundos é crucial para a extração dos cortes. Extraia apenas 1 ponto de cada com seu tempo total.
     """
+    response_ai = generate_response(prompt)
 
-    response = client.chat.completions.create(
-        model="gpt-4-1106-preview",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    # Imprimindo o conteúdo da resposta no terminal
-    print("Sugestões do GPT-4:\n", response.choices[0].message.content)
-    
-    return response.choices[0].message.content
+    return response_ai
 
 def converter_tempo(tempo):
     """Converte o tempo em 'hh:mm:ss' para segundos."""
@@ -163,8 +76,8 @@ def converter_tempo(tempo):
 def extrair_tempo(linha):
     # Usar regex para capturar os tempos no formato hh:mm ou mm:ss
     match = re.findall(r'\d{2}:\d{2}(?::\d{2})?', linha)
-    
-    if len(match) == 1 and "ao final" in linha.lower():
+
+    if len(match) == 1 and any(termo in linha.lower() for termo in ["ao final", "ao fim", "até o fim", "no final", "até o final", "no fim"]):
         # Retorna o início e um indicador de que é até o final
         return match[0], None
     elif len(match) == 2:
@@ -202,8 +115,6 @@ def extrair_trechos_relevantes(sugestoes):
     return trechos_relevantes
     #return trechos_relevantes[:10]
 
-
-
 def extrair_cortes(video_path, sugestoes):
     """Extrai cortes do vídeo original com base nos trechos relevantes sugeridos pelo GPT-4."""
     cortes = []
@@ -224,42 +135,41 @@ def extrair_cortes(video_path, sugestoes):
             # Calcula a duração do corte
             duracao_corte = fim_seg - inicio_seg
             if duracao_corte < 10:
-                print(f"Corte de {inicio} a {fim} é menor que 10 segundos e será ignorado.")
+                log_message(f"Corte de {inicio} a {fim} é menor que 10 segundos e será ignorado.", level="WARNING")
                 continue
-
-            output_video = f"temp/corte_{len(cortes) + 1}.mp4"
+ 
+            output_video = os.path.join(TEMP_DIR, f'corte_{len(cortes) + 1}.mp4')
             ffmpeg_extract_subclip(video_path, inicio_seg, fim_seg, targetname=output_video)
 
             if os.path.exists(output_video) and os.path.getsize(output_video) > 0:
                 cortes.append(output_video)
             else:
-                print(f"Arquivo de corte {output_video} não foi gerado corretamente.")
+                log_message(f"Arquivo de corte {output_video} não foi gerado corretamente.", level="ERROR")
         except Exception as e:
-            print(f"Erro ao processar o trecho {inicio} a {fim}: {e}")
+            log_message(f"Erro ao processar o trecho {inicio} a {fim}: {e}", level="ERROR")
             continue
 
     video.close()  # Fecha o vídeo após o processamento
 
     if not cortes:
-        print("Nenhum corte para retornar.")
+        log_message("Nenhum corte para retornar.", level="ERROR")
         return []
 
-    print("Lista de caminhos dos cortes:", cortes)
+    log_message(f"Lista de caminhos dos cortes: {cortes}", level="INFO")
     return cortes
 
 # Código principal que usa as funções acima
 def processar_video_para_cortes(video_path):
     """Processa o vídeo e gera cortes sugeridos pelo GPT-4, com detalhes de resumo, hashtags e score."""
-    print("Transcrevendo o vídeo...")
-    transcricao = transcrever_video(video_path)
+    log_message("Transcrevendo o vídeo...", level="INFO")
+    transcricao = transcrible_audio(video_path)
 
-    print("Analisando transcrição para gerar sugestões de cortes...")
+    log_message("Analisando transcrição para gerar sugestões de cortes...", level="INFO")
     sugestoes = analisar_transcricao(transcricao)
-    # print("Sugestões do GPT-4:\n", sugestoes)
 
     # Extrair e exibir resumo, hashtags e score para cada corte usar depois
     print("Detalhes de resumo, hashtags e score dos vídeos:")
-    for i, corte in enumerate(sugestoes.split("---")[1:11], start=1):  # Limita a 10 cortes
+    for i, corte in enumerate(sugestoes.split("---")[1:], start=1):  # [1:11] Limita a 10 cortes
         resumo = re.search(r"Resumo:\s*(.+)", corte)
         hashtags = re.search(r"Hashtags:\s*(.+)", corte)
         score = re.search(r"Score:\s*(.+)", corte)
@@ -270,8 +180,8 @@ def processar_video_para_cortes(video_path):
             print("Hashtags:", hashtags.group(1).strip())
             print("Score:", score.group(1).strip())
     
-    print("Extraindo cortes com base nas sugestões de trechos relevantes...")
+    log_message("Extraindo cortes com base nas sugestões de trechos relevantes...", level="INFO")
     video_final = extrair_cortes(video_path, sugestoes)
 
-    print("Processo completo!")
+    log_message("Processo completo!", level="INFO")
     return video_final

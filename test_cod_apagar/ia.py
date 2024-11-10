@@ -30,5 +30,5 @@ def baixar_imagem(url, nome_arquivo="imagem.png"):
     else:
         print("Erro ao baixar a imagem.")
 
-url_imagem = gerar_imagem("crie uma porsche 900 mansory na cor vinho, na estrada, entre os predios, imagem ultra realista, escrito JKp no capô")
+url_imagem = gerar_imagem("Criei um homem com idade 30 anos, cabelos ruivos escuro amarrado estilo samurai, barba fechada da cor do cabelo um pouco mais claro, tom de pele branca, vestido com uma blusa social manga longa roxa furta cor preta, pose do corpo de perfil meio diagonal olhando para a câmera, com a mão próxima boca fechada usando um relógio digital, foto estilo ultra realista")
 baixar_imagem(url_imagem)

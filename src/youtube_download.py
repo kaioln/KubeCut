@@ -5,27 +5,16 @@ import re
 from googleapiclient.discovery import build
 from yt_dlp import YoutubeDL
 from pathlib import Path
-from dotenv import load_dotenv
-
-# Carrega as variáveis do arquivo .env
-load_dotenv()
-
-def load_config():
-    """Carrega as configurações do arquivo JSON."""
-    with open('config.json', 'r') as f:
-        return json.load(f)
-
-# Carregar as configurações
-config = load_config()
+from common.models.configs import config, LOGS_DIR
+from common.models.client_api import yt_key
 
 # Acessa as variáveis de ambiente
-YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
-BASE_DIR = Path(__file__).resolve().parent
-LOGS_DIR = BASE_DIR / config['directories']['logs']['dir']
-print(YOUTUBE_API_KEY)
+yt_key = os.getenv('YOUTUBE_API_KEY')
+YOUTUBE_API_KEY = yt_key
+
 # Configuração do logging
-log_filename = LOGS_DIR / config['directories']['logs']['archive']
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
+log_filename = os.path.join(LOGS_DIR, config['directories']['logs']['archive'])
+
 file_handler = logging.FileHandler(log_filename, encoding='utf-8')
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(formatter)
@@ -68,7 +57,7 @@ def get_latest_video_from_channel(channel_id):
                 if not video_id:
                     logging.warning(f"Vídeo sem ID válido encontrado: {video['snippet']['title']}")
                     continue
-                video_id = "OxcxKv6zXC0" #pra baixar um video especifico q eu queira
+                #video_id = "OxcxKv6zXC0" #pra baixar um video especifico q eu queira
                 video_title = video['snippet']['title']
                 video_url = f'https://www.youtube.com/watch?v={video_id}'
                 logging.info(f"Último vídeo válido encontrado: {video_title} ({video_url})")
@@ -90,13 +79,13 @@ def download_video(video_url, video_title):
         logging.info(f"Iniciando download do vídeo: {video_title}")
 
         # Diretório onde o vídeo será salvo
-        video_dir = Path('videos')
+        video_dir = Path('data/input') / Path('videos')
         video_dir.mkdir(parents=True, exist_ok=True)
-
+        
         # Sanitizar o título do vídeo para criar um nome de arquivo válido
         sanitized_title = sanitize_filename(video_title)
         video_path = video_dir / f"{sanitized_title}.mp4"
-
+        
         # Verifica se o vídeo já foi baixado
         if video_path.exists():
             logging.info(f"Vídeo já foi baixado anteriormente: {video_path}")
