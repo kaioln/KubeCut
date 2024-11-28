@@ -1,18 +1,17 @@
-from datetime import datetime
 import mysql.connector
 from common.models.logginlog import log_message
-#from common.models.client_api import conn
+from common.models.client_api import conn
 
-def save_log(id_user, input_video, hashtag, summary):
+def save_log(id_user, original_dir, input_video, hashtag, summary, score):
     try:
         cursor = conn.cursor()
 
         # Comando SQL para inserir dados
         insert_query = """
-        INSERT INTO logs (id_user, input_video, hashtag, summary, created_at)
-        VALUES (%s, %s, %s, %s, NOW())
+        INSERT INTO logs (id_user, original_dir, input_video, hashtag, summary, score, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """
-        data = (id_user, input_video, hashtag, summary)
+        data = (id_user, original_dir, input_video, hashtag, summary, score)
 
         # Executa o comando e salva no banco
         cursor.execute(insert_query, data)

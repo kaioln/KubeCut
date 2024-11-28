@@ -6,6 +6,7 @@ from common.models.transcrible_audio import transcrible_audio
 from common.models.configs import TEMP_DIR
 from common.models.logginlog import log_message
 from common.models.prompt_ai import generate_response
+from common.utils.database import save_log
 
 def analisar_transcricao(transcricao):
     """Envia a transcrição completa para o GPT-4 para sugerir cortes de forma mais resumida."""
@@ -167,21 +168,32 @@ def processar_video_para_cortes(video_path):
     log_message("Analisando transcrição para gerar sugestões de cortes...", level="INFO")
     sugestoes = analisar_transcricao(transcricao)
 
-    # Extrair e exibir resumo, hashtags e score para cada corte usar depois
+    # Extrair e exibir resumo, hashtags e score para cada corte
     print("Detalhes de resumo, hashtags e score dos vídeos:")
     for i, corte in enumerate(sugestoes.split("---")[1:], start=1):  # [1:11] Limita a 10 cortes
-        resumo = re.search(r"Resumo:\s*(.+)", corte)
-        hashtags = re.search(r"Hashtags:\s*(.+)", corte)
-        score = re.search(r"Score:\s*(.+)", corte)
-        
-        if resumo and hashtags and score:
+        resumo_match = re.search(r"Resumo:\s*(.+)", corte)
+        hashtags_match = re.search(r"Hashtags:\s*(.+)", corte)
+        score_match = re.search(r"Score:\s*(.+)", corte)
+
+        # Extrai valores de resumo, hashtags e score, se encontrados
+        if resumo_match and hashtags_match and score_match:
+            resumo = resumo_match.group(1).strip()
+            hashtags = hashtags_match.group(1).strip()
+            score = score_match.group(1).strip()
+            corte_nome = f"corte_{i}.mp4"
+
+            # Salva no banco de dados
+            # save_log(id_user=123, original_dir=video_path, input_video=corte_nome, hashtag=hashtags, summary=resumo, score=score)
+
+            # Imprime para verificação
             print(f"\nCorte {i}:")
-            print("Resumo:", resumo.group(1).strip())
-            print("Hashtags:", hashtags.group(1).strip())
-            print("Score:", score.group(1).strip())
+            print("Resumo:", resumo)
+            print("Hashtags:", hashtags)
+            print("Score:", score)
     
     log_message("Extraindo cortes com base nas sugestões de trechos relevantes...", level="INFO")
     video_final = extrair_cortes(video_path, sugestoes)
 
     log_message("Processo completo!", level="INFO")
     return video_final
+

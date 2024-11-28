@@ -2,7 +2,7 @@ import sys
 import os
 import moviepy.editor as mp
 from pathlib import Path
-from src import analysis
+from src.editor import analysis
 from common.models.configs import SUBTITLE_DIR, CLIPS_DIR
 from common.models.logginlog import log_message
 from common.models.subtitle import add_subtitle
@@ -45,7 +45,7 @@ def save_clips(video_paths, unique_id, video_name):
             # Gerar e adicionar legendas
             log_message("Gerando arquivo de transcrição.")
             srt_filename = generate_srt_from_video(clip_path, srt_filename)
-            log_message("Adicionando legenda.")
+            log_message("Carregando legendas...")
             add_subtitle(clip_path, srt_filename)
             log_message(f"Clip salvo: {clip_path}", level="INFO")
         

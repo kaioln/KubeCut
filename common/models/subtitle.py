@@ -71,6 +71,8 @@ def add_subtitle(clip_path, srt_filename, font_size=18,
             log_message("O caminho do clipe é None.", level="ERROR")
         temp_output_path = clip_path.replace('.mp4', '_temp.mp4')
         
+        log_message("Adicionando legenda ao clip...")
+
         command = [
             'ffmpeg',
             '-y',
@@ -90,7 +92,7 @@ def add_subtitle(clip_path, srt_filename, font_size=18,
                 f"eq=contrast=1.2:saturation=1.1"
             ),
             '-movflags', '+faststart',
-            '-metadata', 'comment=Video processed for copyright camouflage',
+            '-metadata', 'comment=Processed video with key moments extracted for optimal content engagement',
             '-af', 'atempo=1.05',
             '-c:v', 'libx264',
             '-c:a', 'aac',
@@ -111,7 +113,7 @@ def add_subtitle(clip_path, srt_filename, font_size=18,
     except subprocess.CalledProcessError as e:
         log_message(f"Erro ao adicionar legenda: {e}", level="ERROR")
     except Exception as e:
-        log_message(f"Ocorreu um erro: {e}", level="ERRIR")
+        log_message(f"Ocorreu um erro: {e}", level="ERROR")
     finally:
         if srt_temp_file and os.path.exists(srt_temp_file):
             os.remove(srt_temp_file)
