@@ -1,10 +1,11 @@
 from common.models.client_api import client
 from common.models.logginlog import log_message
 
-def generate_response(prompt):
+def generate_response(prompt, system_prompt="You are a helpful assistant."):
     response = client.chat.completions.create(
         model="gpt-4-1106-preview",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "system", "content": system_prompt},
+                  {"role": "user", "content": prompt}]
     )
     
     # Imprimindo o conteúdo da resposta no terminal

@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 def generate_unique_id():
     """Gera um ID único baseado no timestamp."""    
@@ -11,3 +12,8 @@ def format_time(seconds):
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours:02}:{minutes:02}:{seconds:02},{millisec:03}"
+
+def sanitize_prompt(text):
+    text = re.sub(r'[^\w\s,.]', '', text)  # Remove caracteres especiais, exceto pontuação básica
+    text = text.strip()
+    return text

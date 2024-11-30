@@ -96,7 +96,7 @@ terraform.tfstate
 # Ignorar arquivos MP4
 *.mp4
 *.mov
-*.mp3
+.mp3
 *.log
 *.srt
 *.wav

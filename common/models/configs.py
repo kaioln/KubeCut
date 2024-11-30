@@ -26,10 +26,12 @@ FINAL_DIR = os.path.join(BASE_DIR, 'data\\input', config['directories']['process
 LOGS_DIR = os.path.join(BASE_DIR, config['directories']['logs']['dir'])
 VIDEOS_DIR = os.path.join(BASE_DIR, 'data\\input', config['directories']['videos'])
 AUDIO_DIR = os.path.join(TEMP_DIR, config['directories']['audio'])
+SONGS_DIR = os.path.join(BASE_DIR, 'data', config['directories']['songs'])
+IMAGES_DIR = os.path.join(TEMP_DIR, config['directories']['images'])
 WORDS_DIR = os.path.join(BASE_DIR, 'common', config['directories']['prohibited_words']['dir'])
 
 # Lista de diretórios a verificar/criar
-directories = [TEMP_DIR, SUBTITLE_DIR, CLIPS_DIR, FINAL_DIR, LOGS_DIR, VIDEOS_DIR, AUDIO_DIR, WORDS_DIR]
+directories = [TEMP_DIR, SUBTITLE_DIR, CLIPS_DIR, FINAL_DIR, LOGS_DIR, VIDEOS_DIR, AUDIO_DIR, IMAGES_DIR, WORDS_DIR]
 
 # Função para verificar se os diretórios existem, e criá-los se não existirem
 def ensure_directories_exist(dirs):

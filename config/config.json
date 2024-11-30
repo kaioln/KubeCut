@@ -16,14 +16,16 @@
     },
     "videos": "videos",
     "audio": "audio",
+    "songs": "songs",
+    "images": "images",
     "prohibited_words": {
       "dir": "words", 
       "archive": "prohibited.word"
     }
   },
-  "platform_post": "youtube",
+  "platform_post": "tiktok2",
   "font_file": "Montserrat",
-  "max_words_per_segment": 5,
+  "max_words_per_segment": 4,
   "whisper_model": "tiny",
   "sentiment_model": "distilbert-base-uncased-finetuned-sst-2-english",
   "emotion_model": "j-hartmann/emotion-english-distilroberta-base",

@@ -57,7 +57,8 @@ def analisar_transcricao(transcricao):
     Indique quais minutos são irrelevantes e podem ser ignorados.
     ALERTA: A precisão dos minutos e segundos é crucial para a extração dos cortes. Extraia apenas 1 ponto de cada com seu tempo total.
     """
-    response_ai = generate_response(prompt)
+    system_prompt = "Você é um perfeito editor de videos e critico em suas analises para Obter o Máximo de Engajamento."
+    response_ai = generate_response(prompt, system_prompt)
 
     return response_ai
 

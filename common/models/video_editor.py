@@ -1,5 +1,6 @@
 import cv2
 from common.models.configs import config
+from common.models.platform_size import platform_size
 
 platform_post = config['platform_post']
 
@@ -57,17 +58,3 @@ def adjust_focus(clip):
     resized_clip = cropped_clip.resize(newsize=(target_width, target_height))
 
     return resized_clip
-
-def platform_size(platform):
-    # Dimensões da plataforma de destino
-    platform_dimensions = {
-        'instagram_feed': (1080, 1080),
-        'instagram_reels': (1080, 1920),
-        'tiktok': (1080, 1920),
-        'youtube': (1920, 1080)
-    }
-    
-    if platform not in platform_dimensions:
-        raise ValueError(f"Plataforma {platform} não suportada. Escolha entre: {list(platform_dimensions.keys())}")
-    
-    return platform_dimensions[platform]
